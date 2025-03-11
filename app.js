@@ -9,6 +9,6 @@ app.use(express.json());
 app.use(cors());
 app.use(morgan("dev"));
 
-app.use(router);
+app.use("/api/v1", router);
 
 module.exports = app;
