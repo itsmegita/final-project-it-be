@@ -1,8 +1,25 @@
-const PDFDocument = require("pdfkit");
+const puppeteer = require("puppeteer");
 const fs = require("fs");
 const path = require("path");
 const Transaction = require("../models/Transaction");
 
+// fungsi untuk membuat pdf dengan puppeteer
+const generatePDF = async (htmlContent, outputFilePath) => {
+  const browser = await puppeteer.launch();
+  const page = await browser.newPage();
+
+  await page.setContent(htmlContent, { waitUntil: "networkidle0" });
+  await page.pdf({
+    path: outputFilePath,
+    format: "A4",
+    printBackground: true,
+    margin: { top: "20mm", right: "15mm", bottom: "20mm", left: "15mm" },
+  });
+
+  await browser.close();
+};
+
+// laporan laba rugi
 const generateProfitLossReport = async (req, res) => {
   try {
     // ambil data transaksi berdasarkan rentang waktu
@@ -21,79 +38,58 @@ const generateProfitLossReport = async (req, res) => {
     });
     const profitOrLoss = totalIncome - totalExpense;
 
-    // memastikan bahwa folder reports ada
-    const reportsDir = path.join(__dirname, "../reports");
-    if (!fs.existsSync(reportsDir)) {
-      fs.mkdirSync(reportsDir, { recursive: true });
-    }
-
     // buat dokumen pdf
-    const doc = new PDFDocument();
-    const filePath = path.join(__dirname, "../reports/laba_rugi.pdf");
-    const stream = fs.createWriteStream(filePath);
-    doc.pipe(stream);
+    const htmlContent = `
+    <html>
+    <head>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1, h2 { text-align: center; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid black; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .summary { margin-top: 20px; }
+      </style>
+    </head>
+    <body>
+      <h1>Laporan Laba Rugi</h1>
+      <h2>Periode: ${startDate} - ${endDate}</h2>
+      <div class="summary">
+        <p><strong>Total Pendapatan:</strong> Rp ${totalIncome.toLocaleString()}</p>
+        <p><strong>Total Pengeluaran:</strong> Rp ${totalExpense.toLocaleString()}</p>
+        <p><strong>Keuntungan / Kerugian:</strong> Rp ${profitOrLoss.toLocaleString()}</p>
+      </div>
+      <table>
+        <tr><th>No</th><th>Kategori</th><th>Jumlah (Rp)</th><th>Deskripsi</th></tr>
+        ${transactions
+          .map(
+            (trx, index) => `
+            <tr>
+              <td>${index + 1}</td>
+              <td>${trx.category}</td>
+              <td>${trx.amount.toLocaleString()}</td>
+              <td>${trx.description}</td>
+            </tr>
+          `
+          )
+          .join("")}
+        </table>
+    </body>
+    </html>`;
 
-    // header
-    doc.fontSize(16).text("Laporan Laba Rugi", { align: "center" });
-    doc
-      .fontSize(12)
-      .text(`Periode: ${startDate} - ${endDate}`, { align: "center" });
-    doc.moveDown();
+    // pastikan bahwa folder reports ada
+    const reportsDir = path.join(__dirname, "../reports");
+    if (!fs.existsSync(reportsDir))
+      fs.mkdirSync(reportsDir, { recursive: true });
+    const filePath = path.join(reportsDir, "laba_rugi.pdf");
+    await generatePDF(htmlContent, filePath);
 
-    // ringkasan keuangan
-    doc.fontSize(14).text("Ringkasan Keuangan:");
-    doc
-      .fontSize(12)
-      .text(`Total Pendapatan: Rp.${totalIncome.toLocaleString()}`);
-    doc
-      .fontSize(12)
-      .text(`Total Pengeluaran: Rp.${totalExpense.toLocaleString()}`);
-    doc
-      .fontSize(12)
-      .text(`Keuntungan / Kerugian: Rp.${profitOrLoss.toLocaleString()}`, {
-        underline: true,
-      });
-    doc.moveDown();
-
-    // detail pendapatan
-    doc.fontSize(14).text("Rincian Pendapatan:");
-    transactions
-      .filter((trx) => trx.type === "income")
-      .forEach((trx, index) => {
-        doc
-          .fontSize(12)
-          .text(
-            `${index + 1}. ${
-              trx.category
-            }: Rp${trx.amount.toLocaleString()} - ${trx.description}`
-          );
-      });
-    doc.moveDown();
-
-    // detail pengeluaran
-    doc.fontSize(14).text("Rincian Pengeluaran:");
-    transactions
-      .filter((trx) => trx.type === "expense")
-      .forEach((trx, index) => {
-        doc
-          .fontSize(12)
-          .text(
-            `${index + 1}. ${
-              trx.category
-            }: Rp ${trx.amount.toLocaleString()} - ${trx.description}`
-          );
-      });
-
-    // akhir pdf
-    doc.end();
-
-    stream.on("finish", () => {
-      res.download(filePath, "Laporan_Laba_Rugi.pdf", (err) => {
-        if (err)
-          res
-            .status(500)
-            .json({ status: "Error", message: "Gagal mengunduh laporan" });
-      });
+    res.download(filePath, "Laporan_Laba_Rugi.pdf", (err) => {
+      if (err)
+        res.status(500).json({
+          status: "Error",
+          message: "Gagal mengunduh laporan",
+        });
     });
   } catch (err) {
     res.status(500).json({
@@ -104,6 +100,7 @@ const generateProfitLossReport = async (req, res) => {
   }
 };
 
+// laporan arus kas
 const generateCashFlowReport = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
@@ -133,49 +130,48 @@ const generateCashFlowReport = async (req, res) => {
 
     const netCashFlow = totalIncome - totalExpense;
 
-    const doc = new PDFDocument();
-    const reportPath = path.join(__dirname, "../reports/arus_kas.pdf");
-    const stream = fs.createWriteStream(reportPath);
-    doc.pipe(stream);
+    // pdf
+    const htmlContent = `
+    <html>
+    <head>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1, h2 { text-align: center; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid black; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .summary { margin-top: 20px; }
+      </style>
+    </head>
+    <body>
+      <h1>Laporan Arus Kas</h1>
+      <h2>Periode: ${startDate} - ${endDate}</h2>
+      <div class="summary">
+        <p><strong>Total Pendapatan:</strong> Rp ${totalIncome.toLocaleString()}</p>
+        <p><strong>Total Pengeluaran:</strong> Rp ${totalExpense.toLocaleString()}</p>
+        <p><strong>Arus Kas Bersih:</strong> Rp ${netCashFlow.toLocaleString()}</p>
+      </div>
+      <table>
+        <tr><th>No</th><th>Kategori</th><th>Jumlah (Rp)</th><th>Deskripsi</th></tr>
+        ${transactions
+          .map(
+            (trx, index) => `
+            <tr>
+              <td>${index + 1}</td>
+              <td>${trx.category}</td>
+              <td>${trx.amount.toLocaleString()}</td>
+              <td>${trx.description}</td>
+            </tr>
+          `
+          )
+          .join("")}
+        </table>
+    </body>
+    </html>`;
 
-    // header
-    doc.fontSize(16).text("Laporan Arus Kas", { align: "center" });
-    doc.moveDown();
-    doc
-      .fontSize(12)
-      .text(`Periode: ${startDate} - ${endDate}`, { align: "center" });
-    doc.moveDown();
-
-    // detail
-    doc
-      .fontSize(12)
-      .text(`Total Pemasukan: RP.${totalIncome.toLocaleString()}`);
-    doc.text(`Total Pengeluaran: Rp.${totalExpense.toLocaleString()}`);
-    doc.text(`Arus kas bersih: Rp.${netCashFlow.toLocaleString()}`);
-
-    doc.moveDown();
-    doc.text("Rincian Transaksi:");
-    transactions.forEach((trx, index) => {
-      doc.text(
-        `${index + 1}. ${trx.category} - Rp${trx.amount.toLocaleString()} (${
-          trx.type
-        })`
-      );
-    });
-
-    doc.end();
-
-    stream.on("finish", () => {
-      res.download(reportPath, "arus_ks.pdf", (err) => {
-        if (err) {
-          console.error("Download error: ", err);
-          res.status(500).json({
-            status: "Error",
-            message: "Gagal mengunduh laporan",
-          });
-        }
-      });
-    });
+    const filePath = path.join(__dirname, "../reports/arus_kas.pdf");
+    await generatePDF(htmlContent, filePath);
+    res.download(filePath, "Laporan_Arus_Kas.pdf");
   } catch (err) {
     res.status(500).json({
       status: "Error",
@@ -185,6 +181,7 @@ const generateCashFlowReport = async (req, res) => {
   }
 };
 
+// laporan rekapitulasi transaksi
 const getTransactionSummaryReport = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
@@ -219,60 +216,41 @@ const getTransactionSummaryReport = async (req, res) => {
     });
 
     // buat file pdf
-    const doc = new PDFDocumnet({ margin: 50 });
-    const filePath = path.joiin(
+    const htmlContent = `
+    <html>
+    <head>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1, h2 { text-align: center; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid black; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+      </style>
+    </head>
+    <body>
+      <h1>Laporan Rekapitulasi Transaksi</h1>
+      <h2>Periode: ${startDate} - ${endDate}</h2>
+      <table>
+        <tr><th>Kategori</th><th>Total (Rp)</th></tr>
+        ${Object.keys(summary)
+          .map(
+            (category) => `
+            <tr>
+              <td>${category}</td>
+              <td>${summary[category].toLocaleString()}</td>
+            </tr>`
+          )
+          .join("")}
+        </table>
+    </body>
+    </html>`;
+
+    const filePath = path.join(
       __dirname,
       "../reports/rekapitulasi_transaksi.pdf"
     );
-    const writeStream = fs.createWriteStream(filePath);
-    doc.pipe(writeStream);
-
-    // header
-    doc
-      .fontSize(16)
-      .text("Laporan Rekapitulasi Transaksi", { align: "center" });
-    doc.moveDown();
-    doc
-      .fontSize(12)
-      .text(`Periode: ${startDate} - ${endDate}`, { align: "center" });
-    doc.moveDown();
-
-    // tabel
-    doc.fontSize(12).text("Kategori", 50, doc.y, { bold: true });
-    doc.text("Total", 300, doc.y, { bold: true });
-    doc.text("Persentase", 450, doc.y, { bold: true });
-    doc.moveDown();
-
-    Object.keys(summary).forEach((category) => {
-      doc.text(category, 50, doc.y);
-      doc.text(`Rp ${summary[category].toLocaleString()}`, 300, doc.y);
-      doc.text(
-        `${((summary[category] / totalAmount) * 100).toFixed(2)}%`,
-        450,
-        doc.y
-      );
-      doc.moveDown();
-    });
-
-    // total keseluruhan
-    doc.moveDown();
-    doc
-      .fontSize(14)
-      .text(`Total: Rp ${totalAmount.toLocaleString()}`, { align: "right" });
-
-    doc.end();
-
-    writeStream.on("finish", () => {
-      res.download(filePath, "rekapitulasi_transaksi.pdf", (err) => {
-        if (err) {
-          console.error("Error saat mengunduh laporan:", err);
-          res.status(500).json({
-            status: "Error",
-            message: "Gagal mengunduh laporan",
-          });
-        }
-      });
-    });
+    await generatePDF(htmlContent, filePath);
+    res.download(filePath, "Rekapitulasi_Transaksi.pdf");
   } catch (err) {
     res.status(500).json({
       status: "Error",

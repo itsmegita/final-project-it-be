@@ -1,4 +1,6 @@
+const fs = require("fs");
 const Transaction = require("../models/Transaction");
+const { exportToCSV } = require("../utils/exportToCSV");
 
 // buat transaksi baru
 const createTransaction = async (req, res) => {
@@ -208,10 +210,54 @@ const deleteTransaction = async (req, res, next) => {
   }
 };
 
+// export transaction ke csv
+const exportTransactionsToCSV = async (req, res) => {
+  try {
+    const transactions = await Transaction.find({ userId: req.user.id }).lean();
+
+    if (!transactions.length) {
+      return res.status(404).json({
+        status: "Error",
+        message: "Tidak ada transaksi untuk diekspor",
+      });
+    }
+
+    const fileName = `transactions-${Date.now()}.csv`;
+    const filePath = await exportToCSV(transactions, fileName);
+
+    console.log(`📂 File CSV tersedia di: ${filePath}`);
+
+    res.download(filePath, fileName, (err) => {
+      if (err) {
+        console.error("❌ Kesalahan saat mengunduh CSV:", err);
+        res.status(500).json({
+          status: "Error",
+          message: "Terjadi kesalahan saat mengunduh CSV",
+        });
+      }
+      // Jangan langsung hapus file, beri delay 5 detik untuk memastikan berhasil di-download
+      setTimeout(() => {
+        fs.unlink(filePath, (err) => {
+          if (err) console.error("⚠️ Gagal menghapus file:", err);
+          else console.log("🗑️ File CSV dihapus setelah diunduh.");
+        });
+      }, 30 * 60 * 1000);
+    });
+  } catch (err) {
+    console.error("❌ Terjadi kesalahan server:", err);
+    res.status(500).json({
+      status: "Error",
+      message: "Terjadi kesalahan server",
+      error: err.message,
+    });
+  }
+};
+
 module.exports = {
   createTransaction,
   getTransactions,
   getTransactionById,
   updateTransaction,
   deleteTransaction,
+  exportTransactionsToCSV,
 };
