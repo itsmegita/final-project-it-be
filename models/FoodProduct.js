@@ -1,12 +1,35 @@
 const mongoose = require("mongoose");
 
-const bahanBakuSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  name: { type: String, required: true },
-  unit: { type: String, required: true },
-  stock: { type: Number, required: true, default: 0 },
-  minimumStock: { type: Number, default: 0 },
-  createdAt: { type: Date, default: Date.now },
-});
+const foodProductSchema = new mongoose.Schema(
+  {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+      minlength: 3,
+      maxlength: 100,
+    },
+    category: {
+      type: String,
+      required: true,
+      enum: ["Bahan Pokok", "Bumbu", "Minuman", "Lainnya"],
+    },
+    stock: { type: Number, required: true, min: 0 },
+    unit: {
+      type: String,
+      required: true,
+      enum: ["Kg", "Gram", "Liter", "Mililiter", "Pcs"],
+    },
+    price: { type: Number, required: true, min: 0 },
+    description: { type: String, trim: true, maxlength: 500 },
+  },
+  { timestamps: true }
+);
 
-module.exports = mongoose.model("BahanBaku", bahanBakuSchema);
+const FoodProduct = mongoose.model("FoodProduct", foodProductSchema);
+module.exports = FoodProduct;

@@ -5,6 +5,7 @@ const dashboardRouter = require("./dashboardRouter");
 const reportRouter = require("./reportRouter");
 const debtRouter = require("./debtReceivableRouter");
 const menuRouter = require("./menuRouter");
+const foodProductRouter = require("./foodProductRouter");
 
 const router = express.Router();
 
@@ -14,5 +15,6 @@ router.use("/dashboard", dashboardRouter);
 router.use("/reports", reportRouter);
 router.use("/debt", debtRouter);
 router.use("/menu", menuRouter);
+router.use("/food-product", foodProductRouter);
 
 module.exports = router;
