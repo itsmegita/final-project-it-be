@@ -1,6 +1,7 @@
 const DebtReceivable = require("../models/DebtReceivable");
 const moment = require("moment");
 const mongoose = require("mongoose");
+const { createNotification } = require("../utils/notificationHelper");
 
 // tambah hutang/piutang
 const createDebtReceivable = async (req, res) => {
@@ -40,6 +41,14 @@ const createDebtReceivable = async (req, res) => {
     });
 
     await newDebtReceivable.save();
+
+    // notifikasi
+    await createNotification(
+      userId,
+      "Hutang/Piutang Baru",
+      `Hutang/Piutang sebesar Rp{amount} telah ditambahkan`
+    );
+
     res.status(201).json({
       status: "Success",
       message: "Data hutang/piutang berhasil ditambahkan",
@@ -94,7 +103,7 @@ const getAllDebtsReceivables = async (req, res) => {
     }
 
     // ambil data dari database
-    const data = await DebtReceivable.find(filter).sort(sortOption).lean()
+    const data = await DebtReceivable.find(filter).sort(sortOption).lean();
 
     res.status(200).json({
       status: "Success",
@@ -180,17 +189,28 @@ const updateDebtReceivable = async (req, res) => {
       });
     }
 
+    const existingData = await DebtReceivable.findOne({
+      _id: req.params.id,
+      userId: req.user.id,
+    });
+    if (!existingData)
+      return res.status(404).json({
+        status: "Error",
+        message: "Data tidak ditemukan",
+      });
+
     const updatedData = await DebtReceivable.findOneAndUpdate(
       { _id: req.params.id, userId: req.user.id },
       { $set: updateFields },
       { new: true }
     );
 
-    if (!updatedData) {
-      return res.status(404).json({
-        status: "Error",
-        message: "Data tidak ditemukan",
-      });
+    if (updateFields.status === "Lunas" && existingData.status !== "Lunas") {
+      await createNotification(
+        req.user.id,
+        "Hutang/Piutang Lunas",
+        `Hutang/Piutang sebesar Rp${existingData.amount} telah lunas`
+      );
     }
 
     res.status(200).json({
@@ -245,9 +265,6 @@ const deleteDebtReceivable = async (req, res) => {
 // get daftar hutang/piutang yang jatuh tempo
 const getDueDateReminders = async (req, res) => {
   try {
-    console.log("Masuk ke getDueDateReminders"); // Debugging
-    console.log("Request params:", req.params);
-    console.log("Request query:", req.query);
     // validasi user
     if (!req.user || !req.user.id) {
       return res.status(401).json({
@@ -259,6 +276,7 @@ const getDueDateReminders = async (req, res) => {
     // ambil tanggal hari ini dan 7 hari ke depan
     const today = moment().startOf("day");
     const nextWeek = moment().add(7, "days").endOf("day");
+    const threeDaysBeforeDue = moment().add(3, "days").endOf("day");
 
     // ambil data dengan validasi userId dan rentang tanggal jatuh tempo
     const reminders = await DebtReceivable.find({
@@ -272,6 +290,17 @@ const getDueDateReminders = async (req, res) => {
         status: "Error",
         message: "Tidak ada data pengingat jatuh tempo dalam 7 hari ke depan",
       });
+    }
+
+    // notifikasi
+    for (const debt of reminders) {
+      if (moment(debt.dueDate).isSame(threeDaysBeforeDue, "day")) {
+        await createNotification(
+          req.user.id,
+          "Pengingat Jatuh Tempo",
+          `Hutang/Piutang atas nama ${debt.name} akan jatuh tempo dalam 3 hari`
+        );
+      }
     }
 
     // kirim respon sukses

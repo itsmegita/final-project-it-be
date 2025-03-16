@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const FoodProduct = require("../models/FoodProduct");
+const { createNotification } = require("../utils/notificationHelper");
 
 // tambah bahan baku baru
 const createFoodProduct = async (req, res) => {
@@ -58,6 +59,12 @@ const createFoodProduct = async (req, res) => {
       description,
     });
     await newFoodproduct.save();
+
+    // notifikasi
+    await Notification.create({
+      userId: req.user.id,
+      message: `Bahan baku ${name} berhasil ditambahkan sebanyak ${stock} ${unit}`,
+    });
 
     res.status(201).json({
       status: "Success",
@@ -210,6 +217,12 @@ const updateFoodProduct = async (req, res) => {
 
     await foodProduct.save();
 
+    // notifikasi
+    await Notification.create({
+      userId: req.user.id,
+      message: `Bahan baku ${foodProduct.name} berhasil diperbarui`,
+    });
+
     res.status(200).json({
       status: "Success",
       message: `Food product dengan id ${req.params.id} berhasil diperbarui`,
@@ -253,6 +266,12 @@ const deleteFoodProduct = async (req, res) => {
 
     // hapus food product
     await foodProduct.deleteOne();
+
+    // notifikasi
+    await Notification.create({
+      userId: req.user.id,
+      message: `Bahan baku ${foodProduct.name} berhasil dihapus`,
+    });
 
     res.status(200).json({
       status: "Success",

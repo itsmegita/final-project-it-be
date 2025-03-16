@@ -1,6 +1,7 @@
 const fs = require("fs");
 const Transaction = require("../models/Transaction");
 const { exportToCSV } = require("../utils/exportToCSV");
+const { createNotification } = require("../utils/notificationHelper");
 
 // buat transaksi baru
 const createTransaction = async (req, res) => {
@@ -27,6 +28,14 @@ const createTransaction = async (req, res) => {
     });
 
     await transaction.save();
+
+    // notifikasi
+    await createNotification(
+      userId,
+      "Transaksi Baru",
+      `Transaksi sebesar Rp${amount} dengan kategori '${category}' telah ditambahkan`
+    );
+
     res.status(201).json({
       status: "Success",
       message: "Transaksi berhasil dibuat",
@@ -157,17 +166,42 @@ const updateTransaction = async (req, res, next) => {
       });
     }
 
-    const transaction = await Transaction.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user.id },
-      { $set: updateFields },
-      { new: true }
-    );
+    const transaction = await Transaction.findOne({
+      _id: req.params.id,
+      userId: req.user.id,
+    });
 
     if (!transaction)
       return res.status(404).json({
         status: "Error",
         message: "Transaksi tidak ditemukan",
       });
+
+    // simpan data sebelum perubahan
+    const oldData = { ...transaction.toObject };
+
+    // update
+    Object.assign(transaction, updateFields);
+    await transaction.save();
+
+    // cek fie;d yang berubah
+    let changes = [];
+    Object.keys(updateFields).forEach((key) => {
+      if (oldData[key] !== updateFields[key]) {
+        changes.push(`${key}: ${oldData[key]} ➝ ${updateFields[key]}`);
+      }
+    });
+
+    // notifikasi
+    const changesText =
+      changes.length > 0
+        ? changes.join(", ")
+        : "Beberapa data telah diperbarui";
+    await createNotification(
+      req.user.id,
+      "Transaksi Diperbarui",
+      `Transaksi telah diperbarui (${changesText})`
+    );
 
     res.status(200).json({
       status: "Success",
@@ -196,6 +230,13 @@ const deleteTransaction = async (req, res, next) => {
         status: "Error",
         message: "Transaksi tidak ditemukan",
       });
+
+    // notifikasi
+    await createNotification(
+      req.user.id,
+      "Transaksi Dihapus",
+      `Transaksi sebesar Rp${transaction.amount} telah dihapus`
+    );
 
     res.status(200).json({
       status: "Success",

@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const Menu = require("../models/Menu");
+const { createNotification } = require("../utils/notificationHelper");
 
 // tambah menu baru
 const createMenu = async (req, res) => {
@@ -44,6 +45,13 @@ const createMenu = async (req, res) => {
       image,
     });
     await newMenu.save();
+
+    // notifikasi
+    await createNotification(
+      req.user.id,
+      "Menu baru ditambahkan",
+      `Menu '${name}' berhasil ditambahkan`
+    );
 
     res.status(201).json({
       status: "Success",
@@ -183,6 +191,13 @@ const updateMenu = async (req, res) => {
 
     await menu.save();
 
+    // notifikasi
+    await createNotification(
+      req.user.id,
+      "Menu diperbarui",
+      `Menu '${menu.name}' berhasil diperbarui`
+    );
+
     res.status(200).json({
       status: "Success",
       message: "Menu berhasil diperbarui",
@@ -223,6 +238,13 @@ const deleteMenu = async (req, res) => {
     }
 
     await menu.deleteOne();
+
+    // notifikasi
+    await createNotification(
+      req.user.id,
+      "Menu dihapus",
+      `Menu '${menu.name}' berhasil dihapus`
+    );
 
     res.status(200).json({
       status: "Success",

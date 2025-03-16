@@ -7,10 +7,10 @@ connectDB()
   .then(() => {
     const PORT = process.env.PORT;
     app.listen(PORT, () => {
-      console.log(`✅ Server running on port ${PORT}`);
+      console.log(`Server running on port ${PORT}`);
     });
   })
   .catch((err) => {
-    console.error("❌ Gagal menghubungkan ke database:", err.message);
+    console.error("Gagal menghubungkan ke database:", err.message);
     process.exit(1);
   });
