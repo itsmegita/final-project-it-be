@@ -17,16 +17,37 @@ const foodProductSchema = new mongoose.Schema(
     category: {
       type: String,
       required: true,
-      enum: ["Bahan Pokok", "Bumbu", "Minuman", "Lainnya"],
+      trim: true,
+      lowercase: true,
+      enum: ["bahan pokok", "bumbu", "minuman", "lainnya"],
     },
-    stock: { type: Number, required: true, min: 0 },
+    stock: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0,
+      validate: {
+        validator: Number.isInteger,
+        message: "Stock harus berupa angka bulat (integer)",
+      },
+    },
     unit: {
       type: String,
       required: true,
-      enum: ["Kg", "Gram", "Liter", "Mililiter", "Pcs"],
+      trim: true,
+      lowercase: true,
+      enum: ["kg", "gram", "liter", "mililiter", "pcs"],
     },
-    price: { type: Number, required: true, min: 0 },
-    description: { type: String, trim: true, maxlength: 500 },
+    price: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0,
+      validate: {
+        validator: Number.isInteger,
+        message: "Harga harus berupa angka bulat (integer)",
+      },
+    },
   },
   { timestamps: true }
 );

@@ -1,13 +1,20 @@
 const mongoose = require("mongoose");
 
-const menuSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+const MenuSchema = new mongoose.Schema({
   name: { type: String, required: true },
   category: { type: String, required: true },
   price: { type: Number, required: true },
-  description: { type: String },
-  image: { type: String },
-  createdAt: { type: Date, default: Date.now },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  ingredients: [
+    {
+      foodProductId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "FoodProduct",
+        required: true,
+      },
+      quantity: { type: Number, required: true, min: 0 },
+    },
+  ],
 });
 
-module.exports = mongoose.model("Menu", menuSchema);
+module.exports = mongoose.model("Menu", MenuSchema);
