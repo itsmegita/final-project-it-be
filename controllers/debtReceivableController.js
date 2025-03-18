@@ -1,15 +1,14 @@
-const DebtReceivable = require("../models/DebtReceivable");
-const moment = require("moment");
-const mongoose = require("mongoose");
+const Debt = require("../models/DebtReceivable");
 const { createNotification } = require("../utils/notificationHelper");
 
 // tambah hutang/piutang
-const createDebtReceivable = async (req, res) => {
+const createDebt = async (req, res) => {
   try {
-    const { name, type, amount, dueDate, category, notes } = req.body;
+    const { customerName, type, amount, dueDate, description } = req.body;
+    const userId = req.user.id;
 
     // validasi input
-    if (!name || !type || !amount || !dueDate) {
+    if (!customerName || !type || !amount || !dueDate) {
       return res.status(400).json({
         status: "Error",
         message: "Data tidak lengkap",
@@ -30,41 +29,40 @@ const createDebtReceivable = async (req, res) => {
       });
     }
 
-    const newDebtReceivable = new DebtReceivable({
+    const newDebt = new Debt({
       userId: req.user.id,
-      name,
+      customerName,
       type,
       amount,
       dueDate,
-      category,
-      notes,
+      description,
     });
 
-    await newDebtReceivable.save();
+    await newDebt.save();
 
     // notifikasi
     await createNotification(
       userId,
-      "Hutang/Piutang Baru",
-      `Hutang/Piutang sebesar Rp{amount} telah ditambahkan`
+      `Hutang/Piutang Baru: ${customerName} - Rp${amount}`,
+      `Hutang/Piutang`
     );
 
     res.status(201).json({
       status: "Success",
       message: "Data hutang/piutang berhasil ditambahkan",
-      data: newDebtReceivable,
+      data: newDebt,
     });
   } catch (err) {
     res.status(500).json({
       status: "Error",
-      message: "Terjadi kesalahan server",
+      message: "Gagal menambahkan data hutang/piutang",
       message: err.message,
     });
   }
 };
 
 // get semua hutang/piutang
-const getAllDebtsReceivables = async (req, res) => {
+const getAllDebtss = async (req, res) => {
   try {
     const { type, status, startDate, endDate, sort } = req.query;
     let filter = { userId: req.user.id };
@@ -103,7 +101,7 @@ const getAllDebtsReceivables = async (req, res) => {
     }
 
     // ambil data dari database
-    const data = await DebtReceivable.find(filter).sort(sortOption).lean();
+    const data = await Debt.find(filter).sort(sortOption).lean();
 
     res.status(200).json({
       status: "Success",
@@ -113,23 +111,17 @@ const getAllDebtsReceivables = async (req, res) => {
   } catch (err) {
     res.status(500).json({
       status: "Error",
-      message: "Terjadi kesalahan server",
+      message: "Gagal mendapatkan data hutang/piutang",
       error: err.message,
     });
   }
 };
 
 // get detail hutang/piutang
-const getDebtReceivableById = async (req, res) => {
+const getDebtById = async (req, res) => {
   try {
-    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({
-        status: "Error",
-        message: "ID tidak valid",
-      });
-    }
-
-    const data = await DebtReceivable.findOne({
+    const { id } = req.params;
+    const data = await Debt.findOne({
       _id: req.params.id,
       userId: req.user.id,
     }).lean();
@@ -149,95 +141,111 @@ const getDebtReceivableById = async (req, res) => {
   } catch (err) {
     res.status(500).json({
       status: "Error",
-      message: "Terjadi kesalahan",
+      message: `Gagal mengambil data hutang/piutang pada user dengan ID ${req.params.id}`,
       error: err.message,
     });
   }
 };
 
 // update hutang/piutang
-const updateDebtReceivable = async (req, res) => {
+const updateDebt = async (req, res) => {
   try {
-    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({
+    const { id } = req.params;
+    const { customerName, type, amount, dueDate, description } = req.body;
+
+    const debt = await Debt.findOne({ _id: id, userId: req.user.id });
+    if (!debt)
+      return res.status(404).json({
         status: "Error",
-        message: "ID tidak valid",
+        message: "Data tidak ditemukan",
       });
-    }
 
-    const updateFields = {};
-    Object.keys(req.body).forEach((key) => {
-      if (req.body[key] !== undefined && req.body[key] !== "") {
-        updateFields[key] = req.body[key];
-      }
-    });
-
-    if (
-      updateFields.amount &&
-      (isNaN(updateFields.amount) || updateFields.amount <= 0)
-    ) {
+    if (amount && (isNaN(amount) || amount <= 0)) {
       return res.status(400).json({
         status: "Error",
         message: "Jumlah harus berupa angka positif",
       });
     }
 
-    if (updateFields.dueDate && isNaN(Date.parse(updateFields.dueDate))) {
+    if (dueDate && isNaN(Date.parse(dueDate))) {
       return res.status(400).json({
         status: "Error",
         message: "Tanggal jatuh tempo tidak valid",
       });
     }
 
-    const existingData = await DebtReceivable.findOne({
-      _id: req.params.id,
-      userId: req.user.id,
-    });
-    if (!existingData)
-      return res.status(404).json({
-        status: "Error",
-        message: "Data tidak ditemukan",
-      });
-
-    const updatedData = await DebtReceivable.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user.id },
-      { $set: updateFields },
-      { new: true }
+    const updatedDebt = await Debt.findByIdAndUpdate(
+      id,
+      { customerName, type, amount, dueDate, description },
+      { new: true, runValidators: true }
     );
-
-    if (updateFields.status === "Lunas" && existingData.status !== "Lunas") {
-      await createNotification(
-        req.user.id,
-        "Hutang/Piutang Lunas",
-        `Hutang/Piutang sebesar Rp${existingData.amount} telah lunas`
-      );
-    }
 
     res.status(200).json({
       status: "Success",
       message: "Data hutang/piutang berhasil diperbarui",
-      data: updatedData,
+      data: updatedDebt,
     });
   } catch (err) {
     res.status(500).json({
       status: "Error",
-      message: "Terjadi kesalahan server",
+      message: "Gagal memperbarui data hutang/piutang",
+      error: err.message,
+    });
+  }
+};
+
+// update status menjadi lunas
+const markDebtAsPaid = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const debt = await Debt.findOne({ _id: id, userId: req.user.id });
+
+    // validasi jika tidak ada data debt
+    if (!debt) {
+      return res.status(404).json({
+        status: "Error",
+        message: "Data tidak ditemukan",
+      });
+    }
+
+    // validasi jika debt = lunas
+    if (debt.status === "Lunas") {
+      return res.status(400).json({
+        status: "Error",
+        message: "Data sudah lunas",
+      });
+    }
+
+    debt.status = "Lunas";
+    await debt.save();
+
+    // notifikasi
+    await createNotification(
+      req.user.id,
+      "Hutang/Piutang Lunas",
+      `Hutang/Piutang sebesar Rp${debt.amount} dari ${debt.customerName} telah lunas`
+    );
+
+    res.status(200).json({
+      status: "Success",
+      message: "Status hutang/piutang berhasil diperbarui",
+      data: debt,
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: "Error",
+      message: "Gagal mengubah status hutang/piutang",
       error: err.message,
     });
   }
 };
 
 // hapus hutang/piutang
-const deleteDebtReceivable = async (req, res) => {
+const deleteDebt = async (req, res) => {
   try {
-    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({
-        status: "Error",
-        message: "ID tidak valid",
-      });
-    }
+    const { id } = req.params;
 
-    const deletedData = await DebtReceivable.findOneAndDelete({
+    const deletedData = await Debt.findOneAndDelete({
       _id: req.params.id,
       userId: req.user.id,
     });
@@ -256,73 +264,17 @@ const deleteDebtReceivable = async (req, res) => {
   } catch (err) {
     res.status(500).json({
       status: "Error",
-      message: "Terjadi kesalahan server",
-      error: err.message,
-    });
-  }
-};
-
-// get daftar hutang/piutang yang jatuh tempo
-const getDueDateReminders = async (req, res) => {
-  try {
-    // validasi user
-    if (!req.user || !req.user.id) {
-      return res.status(401).json({
-        status: "Error",
-        message: "Unauthorized",
-      });
-    }
-
-    // ambil tanggal hari ini dan 7 hari ke depan
-    const today = moment().startOf("day");
-    const nextWeek = moment().add(7, "days").endOf("day");
-    const threeDaysBeforeDue = moment().add(3, "days").endOf("day");
-
-    // ambil data dengan validasi userId dan rentang tanggal jatuh tempo
-    const reminders = await DebtReceivable.find({
-      userId: req.user.id,
-      dueDate: { $gte: today.toDate(), $lte: nextWeek.toDate() },
-    }).sort({ dueDate: 1 });
-
-    // jika tidak ada data
-    if (!reminders.length) {
-      return res.status(404).json({
-        status: "Error",
-        message: "Tidak ada data pengingat jatuh tempo dalam 7 hari ke depan",
-      });
-    }
-
-    // notifikasi
-    for (const debt of reminders) {
-      if (moment(debt.dueDate).isSame(threeDaysBeforeDue, "day")) {
-        await createNotification(
-          req.user.id,
-          "Pengingat Jatuh Tempo",
-          `Hutang/Piutang atas nama ${debt.name} akan jatuh tempo dalam 3 hari`
-        );
-      }
-    }
-
-    // kirim respon sukses
-    res.status(200).json({
-      status: "Success",
-      message: "Berhasil mengambil data pengingat jatuh tempo",
-      data: reminders,
-    });
-  } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: "Terjadi kesalahan pada server",
+      message: "Gagal menghapus data hutang/piutang",
       error: err.message,
     });
   }
 };
 
 module.exports = {
-  createDebtReceivable,
-  getAllDebtsReceivables,
-  getDebtReceivableById,
-  updateDebtReceivable,
-  deleteDebtReceivable,
-  getDueDateReminders,
+  createDebt,
+  getAllDebtss,
+  getDebtById,
+  updateDebt,
+  markDebtAsPaid,
+  deleteDebt,
 };

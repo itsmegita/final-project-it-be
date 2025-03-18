@@ -8,7 +8,7 @@ const debtSchema = new mongoose.Schema(
       required: true,
     },
     customerName: { type: String, required: true, trim: true },
-    type: { type: String, enum: ["Utang", "Piutang"], required: true },
+    type: { type: String, enum: ["Hutang", "Piutang"], required: true },
     amount: { type: Number, required: true, min: 0 },
     dueDate: { type: Date, required: true },
     status: {

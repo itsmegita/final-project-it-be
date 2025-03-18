@@ -1,21 +1,21 @@
 const express = require("express");
 const {
-  createDebtReceivable,
-  getAllDebtsReceivables,
-  getDebtReceivableById,
-  updateDebtReceivable,
-  deleteDebtReceivable,
-  getDueDateReminders,
+  createDebt,
+  getAllDebtss,
+  getDebtById,
+  updateDebt,
+  deleteDebt,
+  markDebtAsPaid,
 } = require("../controllers/debtReceivableController");
 const protect = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-router.post("/", protect, createDebtReceivable);
-router.get("/", protect, getAllDebtsReceivables);
-router.get("/due-date-reminders", protect, getDueDateReminders);
-router.get("/:id", protect, getDebtReceivableById);
-router.patch("/:id", protect, updateDebtReceivable);
-router.delete("/:id", protect, deleteDebtReceivable);
+router.post("/", protect, createDebt);
+router.get("/", protect, getAllDebtss);
+router.get("/:id", protect, getDebtById);
+router.patch("/:id", protect, updateDebt);
+router.patch("/:id/mark-as-paid", protect, markDebtAsPaid);
+router.delete("/:id", protect, deleteDebt);
 
 module.exports = router;
