@@ -43,8 +43,8 @@ const createDebt = async (req, res) => {
     // notifikasi
     await createNotification(
       userId,
-      `Hutang/Piutang Baru: ${customerName} - Rp${amount}`,
-      `Hutang/Piutang`
+      `Hutang/Piutang Baru`,
+      `Hutang/Piutang Baru oleh ${customerName} sebesar Rp${amount}`
     );
 
     res.status(201).json({

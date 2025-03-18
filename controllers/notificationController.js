@@ -23,7 +23,7 @@ const getNotifications = async (req, res) => {
 };
 
 // menandai notifikasi sebagai dibaca
-const markAsRead = async (req, res) => {
+const markNotificationAsRead = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -61,27 +61,6 @@ const markAsRead = async (req, res) => {
   }
 };
 
-// menandai semua notifikasi sebagai dibaca
-const markAllAsRead = async (req, res) => {
-  try {
-    await Notification.updateMany(
-      { userId: req.user.id, isRead: false },
-      { isRead: true }
-    );
-
-    res.status(200).json({
-      status: "Success",
-      message: "Semua notifikasi ditandai sebagai dibaca",
-    });
-  } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: "Gagal menandai semua notifikasi",
-      error: err.message,
-    });
-  }
-};
-
 // menghapus notifikasi
 const deleteNotification = async (req, res) => {
   try {
@@ -94,12 +73,12 @@ const deleteNotification = async (req, res) => {
       });
     }
 
-    const notification = await Notification.findOneAndDelete({
+    const deletedNotification = await Notification.findOneAndDelete({
       _id: id,
       userId: req.user.id,
     });
 
-    if (!notification) {
+    if (!deletedNotification) {
       return res.status(404).json({
         status: "Error",
         message: "Notifikasi tidak ditemukan",
@@ -138,8 +117,7 @@ const deleteAllNotifications = async (req, res) => {
 
 module.exports = {
   getNotifications,
-  markAsRead,
-  markAllAsRead,
+  markNotificationAsRead,
   deleteNotification,
   deleteAllNotifications,
 };
