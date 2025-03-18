@@ -7,29 +7,9 @@ const transactionSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-    type: {
-      type: String,
-      enum: ["income", "expense"],
-      required: true,
-    },
-    amount: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-    category: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    description: {
-      type: String,
-      trim: true,
-    },
-    date: {
-      type: Date,
-      default: Date.now,
-    },
+    totalAmount: { type: Number, required: true, min: 0 },
+    date: { type: Date, default: Date.now },
+    description: { type: String, trim: true },
     items: [
       {
         menuId: {
@@ -38,7 +18,6 @@ const transactionSchema = new mongoose.Schema(
           required: true,
         },
         quantity: { type: Number, required: true, min: 1 },
-        totalPrice: { type: Number, required: true, min: 0 },
       },
     ],
   },

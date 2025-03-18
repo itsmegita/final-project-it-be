@@ -2,20 +2,26 @@ const fs = require("fs");
 const Transaction = require("../models/Transaction");
 const { exportToCSV } = require("../utils/exportToCSV");
 const { createNotification } = require("../utils/notificationHelper");
+const {
+  updateStockOnTransaction,
+} = require("../utils/updateStockOnTransaction");
 
 // buat transaksi baru
 const createTransaction = async (req, res) => {
   try {
-    const { type, amount, category, description, date } = req.body;
+    const { type, amount, category, description, date, items } = req.body;
     const userId = req.user.id;
 
-    // validasi input dasar
-    if (!type || !amount || !category) {
+    // validasi input
+    if (!type || !amount || !category || !items || !items.length === 0) {
       return res.status(400).json({
         status: "Error",
         message: "Data transaksi tidak lengkap",
       });
     }
+
+    // update stock bahan baku
+    await updateStockOnTransaction(items);
 
     // membuat transaksi baru
     const transaction = new Transaction({
@@ -25,6 +31,7 @@ const createTransaction = async (req, res) => {
       category,
       description,
       date: date || new Date(),
+      items,
     });
 
     await transaction.save();
@@ -42,6 +49,15 @@ const createTransaction = async (req, res) => {
       transaction,
     });
   } catch (err) {
+    // rollback stok bahan baku juka transaksi gagal
+    if (
+      req.body.items &&
+      Array.isArray(req.body.items) &&
+      req.body.items.length > 0
+    ) {
+      await updateStockOnTransaction(req.body.items, true);
+    }
+
     res.status(500).json({
       status: "Error",
       message: "Terjadi kesalahan saat membuat transaksi",
@@ -51,7 +67,7 @@ const createTransaction = async (req, res) => {
 };
 
 // get semua transaksi
-const getTransactions = async (req, res, next) => {
+const getTransactions = async (req, res) => {
   try {
     const {
       type,
@@ -119,7 +135,7 @@ const getTransactions = async (req, res, next) => {
 };
 
 // get 1 transaksi by id
-const getTransactionById = async (req, res, next) => {
+const getTransactionById = async (req, res) => {
   try {
     const transaction = await Transaction.findOne({
       _id: req.params.id,
@@ -147,7 +163,7 @@ const getTransactionById = async (req, res, next) => {
 };
 
 // update transaksi
-const updateTransaction = async (req, res, next) => {
+const updateTransaction = async (req, res) => {
   try {
     const updateFields = {};
 
@@ -180,11 +196,17 @@ const updateTransaction = async (req, res, next) => {
     // simpan data sebelum perubahan
     const oldData = { ...transaction.toObject };
 
+    // jika ada perubahan pada items, update stok bahan baku
+    if (updateFields.items) {
+      await updateStockOnTransaction(transaction.items, true);
+      await updateStockOnTransaction(updateFields.items);
+    }
+
     // update
     Object.assign(transaction, updateFields);
     await transaction.save();
 
-    // cek fie;d yang berubah
+    // cek field yang berubah
     let changes = [];
     Object.keys(updateFields).forEach((key) => {
       if (oldData[key] !== updateFields[key]) {
@@ -211,14 +233,14 @@ const updateTransaction = async (req, res, next) => {
   } catch (err) {
     res.status(500).json({
       status: "Error",
-      message: "Terjadi kesalahan saat memperbarui transaksi",
+      message: `Terjadi kesalahan saat memperbarui transaksi dengan id ${req.params.id}`,
       error: err.message,
     });
   }
 };
 
 // delete transaksi
-const deleteTransaction = async (req, res, next) => {
+const deleteTransaction = async (req, res) => {
   try {
     const transaction = await Transaction.findOneAndDelete({
       _id: req.params.id,
@@ -230,6 +252,8 @@ const deleteTransaction = async (req, res, next) => {
         status: "Error",
         message: "Transaksi tidak ditemukan",
       });
+
+    await updateStockOnTransaction(transaction.items, true);
 
     // notifikasi
     await createNotification(
@@ -245,8 +269,8 @@ const deleteTransaction = async (req, res, next) => {
   } catch (err) {
     res.status(500).json({
       status: "Error",
-      message: "Terjadi kesalahan",
-      err,
+      message: "Terjadi kesalahan saat menghapus transaksi",
+      error: err.message,
     });
   }
 };

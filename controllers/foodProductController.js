@@ -5,7 +5,7 @@ const { createNotification } = require("../utils/notificationHelper");
 // tambah bahan baku baru
 const createFoodProduct = async (req, res) => {
   try {
-    const { name, category, stock, unit, price, description } = req.body;
+    const { name, category, stock, unit, price } = req.body;
 
     // validasi input
     if (!name || name.length < 3 || name.length > 100) {
@@ -14,13 +14,10 @@ const createFoodProduct = async (req, res) => {
         message: "Nama harus antara 3 - 100 karakter",
       });
     }
-    if (
-      !category ||
-      !["Bahan Pokok", "Bumbu", "Minuman", "Lainnya"].includes(category)
-    ) {
+    if (!category || !["Bahan Pokok", "Bumbu", "Minuman"].includes(category)) {
       return res.status(400).json({
         status: "Error",
-        message: "Kategori harus: Bahan Pokok, Bumbu, Minuman, atau Lainnya",
+        message: "Kategori harus berupa Bahan Pokok, Bumbu,  atau Minuman",
       });
     }
     if (stock === undefined || isNaN(stock) || stock < 0) {
@@ -41,12 +38,6 @@ const createFoodProduct = async (req, res) => {
         message: "Harga harus berupa angka dan tidak boleh negatif",
       });
     }
-    if (description && description.length > 500) {
-      return res.status(400).json({
-        status: "Error",
-        message: "Deskripsi maksimal 500 karakter",
-      });
-    }
 
     // simpan ke database
     const newFoodproduct = new FoodProduct({
@@ -56,15 +47,15 @@ const createFoodProduct = async (req, res) => {
       stock,
       unit,
       price,
-      description,
     });
     await newFoodproduct.save();
 
     // notifikasi
-    await Notification.create({
-      userId: req.user.id,
-      message: `Bahan baku ${name} berhasil ditambahkan sebanyak ${stock} ${unit}`,
-    });
+    await createNotification(
+      req.user.id,
+      "Bahan Baku baru ditambahkan",
+      `Bahan baku ${name} berhasil ditambahkan sebanyak ${stock} ${unit}`
+    );
 
     res.status(201).json({
       status: "Success",
