@@ -10,10 +10,21 @@ const expenseSchema = new mongoose.Schema(
     category: {
       type: String,
       required: true,
+      trim: true,
+      enum: ["Listrik", "Sewa", "Gaji", "Bahan Baku", "Pajak", "Transportasi"],
     },
-    amount: { type: Number, required: true, min: 0 },
+    amount: {
+      type: Number,
+      required: true,
+      min: [0, "Jumlah pengeluaran tidak boleh negatif"],
+    },
     description: { type: String, trim: true },
     date: { type: Date, default: Date.now },
+    paymentMethod: {
+      type: String,
+      enum: ["Cash", "Transfer", "Credit", "E-Wallet"],
+      required: true,
+    },
   },
   { timestamps: true }
 );

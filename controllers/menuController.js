@@ -7,7 +7,6 @@ const { createNotification } = require("../utils/notificationHelper");
 // tambah menu baru
 const createMenu = async (req, res) => {
   try {
-    console.log("Request Body:", req.body); // Debugging log
     const { name, category, price, ingredients } = req.body;
 
     // validasi

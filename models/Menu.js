@@ -1,27 +1,24 @@
 const mongoose = require("mongoose");
 
-const menuSchema = new mongoose.Schema(
-  {
-    name: { type: String, required: true, unique: true, trim: true },
-    category: { type: String, required: true, enum: ["Makanan", "Minuman"] },
-    price: { type: Number, required: true, min: 0 },
-    ingredients: [
-      {
-        foodProductId: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "FoodProduct",
-          required: true,
-        },
-        quantity: { type: Number, required: true, min: 0 },
+const menuSchema = new mongoose.Schema({
+  name: { type: String, required: true, unique: true },
+  price: { type: Number, required: true, min: 0 },
+  ingredients: [
+    {
+      foodProductId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "FoodProduct",
+        required: true,
       },
-    ],
-    userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
+      quantity: { type: Number, required: true, min: 0 },
     },
+  ],
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
   },
-  { timestamps: true }
-);
+  image: { type: String },
+});
 
 module.exports = mongoose.model("Menu", menuSchema);

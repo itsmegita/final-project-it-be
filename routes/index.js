@@ -8,6 +8,7 @@ const menuRouter = require("./menuRouter");
 const foodProductRouter = require("./foodProductRouter");
 const userRouter = require("./userRouter");
 const notificationRouter = require("./notificationRouter");
+const expenseRouter = require("./expenseRouter");
 
 const router = express.Router();
 
@@ -20,5 +21,6 @@ router.use("/menu", menuRouter);
 router.use("/food-product", foodProductRouter);
 router.use("/profile", userRouter);
 router.use("/notification", notificationRouter);
+router.use("/expense", expenseRouter);
 
 module.exports = router;

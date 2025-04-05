@@ -5,7 +5,7 @@ const { createNotification } = require("../utils/notificationHelper");
 // tambah bahan baku baru
 const createFoodProduct = async (req, res) => {
   try {
-    const { name, category, stock, unit, price } = req.body;
+    const { name, unit, stock, pricePerUnit } = req.body;
 
     // validasi input
     if (!name || name.length < 3 || name.length > 100) {
@@ -14,10 +14,10 @@ const createFoodProduct = async (req, res) => {
         message: "Nama harus antara 3 - 100 karakter",
       });
     }
-    if (!category || !["Bahan Pokok", "Bumbu", "Minuman"].includes(category)) {
+    if (!unit || !["gram", "kg", "ml", "liter", "pcs"].includes(unit)) {
       return res.status(400).json({
         status: "Error",
-        message: "Kategori harus berupa Bahan Pokok, Bumbu,  atau Minuman",
+        message: "Unit harus berupa gram, kg, ml, liter, atau pcs",
       });
     }
     if (stock === undefined || isNaN(stock) || stock < 0) {
@@ -26,16 +26,19 @@ const createFoodProduct = async (req, res) => {
         message: "Stock harus berupa angka dan tidak boleh negatif",
       });
     }
-    if (!unit || !["Kg", "Gram", "Liter", "Mililiter", "Pcs"].includes(unit)) {
+    if (pricePerUnit === undefined || isNaN(pricePerUnit) || pricePerUnit < 0) {
       return res.status(400).json({
         status: "Error",
-        message: "Unit harus: Kg, Gram, Liter, Mililiter, atau Pcs",
+        message: "Harga per unit harus berupa angka dan tidak boleh negatif",
       });
     }
-    if (price === undefined || isNaN(price) || price < 0) {
+
+    // cek apakah nama bahan baku sudah ada
+    const existingFoodProduct = await FoodProduct.findOne({ name });
+    if (existingFoodProduct) {
       return res.status(400).json({
         status: "Error",
-        message: "Harga harus berupa angka dan tidak boleh negatif",
+        message: "Nama bahan baku sudah ada",
       });
     }
 
@@ -43,10 +46,9 @@ const createFoodProduct = async (req, res) => {
     const newFoodproduct = new FoodProduct({
       userId: req.user.id,
       name,
-      category,
-      stock,
       unit,
-      price,
+      stock,
+      pricePerUnit,
     });
     await newFoodproduct.save();
 
@@ -135,7 +137,7 @@ const getFoodProduct = async (req, res) => {
 const updateFoodProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, category, stock, unit, price, description } = req.body;
+    const { name, unit, stock, pricePerUnit } = req.body;
 
     // validasi id
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -164,13 +166,10 @@ const updateFoodProduct = async (req, res) => {
         message: "Nama harus antara 3 - 100 karakter",
       });
     }
-    if (
-      category &&
-      !["Bahan Pokok", "Bumbu", "Minuman", "Lainnya"].includes(category)
-    ) {
+    if (unit && !["gram", "kg", "ml", "liter", "pcs"].includes(unit)) {
       return res.status(400).json({
         status: "Error",
-        message: "Kategori harus: Bahan Pokok, Bumbu, Minuman, atau Lainnya",
+        message: "Unit harus: gram, kg, ml, liter, atau pcs",
       });
     }
     if (stock !== undefined && (isNaN(stock) || stock < 0)) {
@@ -179,40 +178,30 @@ const updateFoodProduct = async (req, res) => {
         message: "Stock harus berupa angka dan tidak boleh negatif",
       });
     }
-    if (unit && !["Kg", "Gram", "Liter", "Mililiter", "Pcs"].includes(unit)) {
+    if (
+      pricePerUnit !== undefined &&
+      (isNaN(pricePerUnit) || pricePerUnit < 0)
+    ) {
       return res.status(400).json({
         status: "Error",
-        message: "Unit harus: Kg, Gram, Liter, Mililiter, atau Pcs",
-      });
-    }
-    if (price !== undefined && (isNaN(price) || price < 0)) {
-      return res.status(400).json({
-        status: "Error",
-        message: "Harga harus berupa angka dan tidak boleh negatif",
-      });
-    }
-    if (description && description.length > 500) {
-      return res.status(400).json({
-        status: "Error",
-        message: "Deskripsi maksimal 500 karakter",
+        message: "Harga per unit harus berupa angka dan tidak boleh negatif",
       });
     }
 
     // update data
     foodProduct.name = name || foodProduct.name;
-    foodProduct.category = category || foodProduct.category;
-    foodProduct.stock = stock !== undefined ? stock : foodProduct.stock;
     foodProduct.unit = unit || foodProduct.unit;
-    foodProduct.price = price !== undefined ? price : foodProduct.price;
-    foodProduct.description = description || foodProduct.description;
+    foodProduct.stock = stock !== undefined ? stock : foodProduct.stock;
+    foodProduct.pricePerUnit =
+      pricePerUnit !== undefined ? pricePerUnit : foodProduct.pricePerUnit;
 
     await foodProduct.save();
 
     // notifikasi
-    await Notification.create({
-      userId: req.user.id,
-      message: `Bahan baku ${foodProduct.name} berhasil diperbarui`,
-    });
+    // await Notification.create({
+    //   userId: req.user.id,
+    //   message: `Bahan baku ${foodProduct.name} berhasil diperbarui`,
+    // });
 
     res.status(200).json({
       status: "Success",
@@ -259,10 +248,10 @@ const deleteFoodProduct = async (req, res) => {
     await foodProduct.deleteOne();
 
     // notifikasi
-    await Notification.create({
-      userId: req.user.id,
-      message: `Bahan baku ${foodProduct.name} berhasil dihapus`,
-    });
+    // await Notification.create({
+    //   userId: req.user.id,
+    //   message: `Bahan baku ${foodProduct.name} berhasil dihapus`,
+    // });
 
     res.status(200).json({
       status: "Success",
