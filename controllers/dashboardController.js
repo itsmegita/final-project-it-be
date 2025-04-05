@@ -4,39 +4,44 @@ const Expense = require("../models/Expense");
 const getDashboardData = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { startDate, endDate } = req.query;
+    const year = parseInt(req.query.year) || new Date().getFullYear();
 
-    // filter berdasarkan rentang tanggal jika ada
-    const dateFilter = {};
-    if (startDate && endDate) {
-      dateFilter.date = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate),
-      };
-    }
+    // Dapatkan semua tahun yang tersedia (dari transaksi dan pengeluaran)
+    const transactionYears = await Transaction.find({ userId }).distinct(
+      "date"
+    );
+    const expenseYears = await Expense.find({ userId }).distinct("date");
 
-    // ambil transaksi penjualan
+    // Gabungkan dan ambil tahun unik
+    const allYears = [...transactionYears, ...expenseYears].map((d) =>
+      new Date(d).getFullYear()
+    );
+    const availableYears = [...new Set(allYears)].sort((a, b) => b - a);
+
+    // Filter transaksi dan pengeluaran berdasarkan tahun yang diminta
+    const startDate = new Date(`${year}-01-01`);
+    const endDate = new Date(`${year}-12-31T23:59:59.999`);
+
     const sales = await Transaction.find({
       userId,
       type: "Sale",
-      ...dateFilter,
+      date: { $gte: startDate, $lte: endDate },
     });
 
-    // ambil pengeluaran dari model Expense
-    const expenses = await Expense.find({ userId, ...dateFilter });
+    const expenses = await Expense.find({
+      userId,
+      date: { $gte: startDate, $lte: endDate },
+    });
 
-    // hitung total pemasukan dan pengeluaran
-    let totalIncome = sales.reduce((sum, trx) => sum + (trx.amount || 0), 0);
-    let totalExpense = expenses.reduce(
+    // Hitung total income dan expense
+    const totalIncome = sales.reduce((sum, trx) => sum + (trx.amount || 0), 0);
+    const totalExpense = expenses.reduce(
       (sum, exp) => sum + (exp.amount || 0),
       0
     );
     const balance = totalIncome - totalExpense;
 
-    // hitung jumlah transaksi (penjualan + pengeluaran)
-    const totalTransactions = sales.length + expenses.length;
-
-    // hitung kategori transaksi yang paling sering digunakan
+    // Hitung kategori terbanyak
     const categoryCount = {};
     sales.forEach((trx) => {
       const category = trx.category || "Uncategorized";
@@ -53,11 +58,12 @@ const getDashboardData = async (req, res) => {
         )
       : "Tidak Ada Data";
 
-    // data grafik keuangan per bulan
+    // Data grafik per bulan
     const monthlyData = {};
+
     sales.forEach((trx) => {
       if (trx.date) {
-        const month = trx.date.getMonth() + 1;
+        const month = trx.date.getMonth();
         if (!monthlyData[month]) monthlyData[month] = { income: 0, expense: 0 };
         monthlyData[month].income += trx.amount || 0;
       }
@@ -65,26 +71,40 @@ const getDashboardData = async (req, res) => {
 
     expenses.forEach((exp) => {
       if (exp.date) {
-        const month = exp.date.getMonth() + 1;
+        const month = exp.date.getMonth();
         if (!monthlyData[month]) monthlyData[month] = { income: 0, expense: 0 };
         monthlyData[month].expense += exp.amount || 0;
       }
     });
 
-    // konversi data bulanan ke array dan urutkan
-    const chartData = Object.keys(monthlyData)
-      .map((month) => ({
-        month: parseInt(month),
-        income: monthlyData[month].income,
-        expense: monthlyData[month].expense,
-      }))
-      .sort((a, b) => a.month - b.month);
+    // Konversi data bulanan ke array
+    const monthNames = [
+      "Januari",
+      "Februari",
+      "Maret",
+      "April",
+      "Mei",
+      "Juni",
+      "Juli",
+      "Agustus",
+      "September",
+      "Oktober",
+      "November",
+      "Desember",
+    ];
+
+    const chartData = Array.from({ length: 12 }, (_, i) => ({
+      month: monthNames[i],
+      income: monthlyData[i]?.income || 0,
+      expense: monthlyData[i]?.expense || 0,
+    }));
 
     res.status(200).json({
       status: "Success",
       summary: { totalIncome, totalExpense, balance },
-      transactionStats: { totalTransactions, mostFrequentCategory },
+      transactionStats: { mostFrequentCategory },
       chartData,
+      availableYears,
     });
   } catch (err) {
     res.status(500).json({
