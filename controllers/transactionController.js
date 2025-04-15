@@ -334,6 +334,9 @@ const deleteTransaction = async (req, res) => {
       });
     }
 
+    const transactionName = transaction.customerName;
+    const transactionDate = transaction.date.toISOString().split("T")[0];
+
     // Restore stok
     for (const item of transaction.orderItems) {
       const menuData = await Menu.findById(item.menuItem);
@@ -361,7 +364,7 @@ const deleteTransaction = async (req, res) => {
     await createNotification(
       req.user.id,
       "Transaksi dihapus",
-      `Transaksi berhasil dihapus`
+      `Transaksi pada customer '${transactionName}' pada tanggal '${transactionDate}' berhasil dihapus`
     );
 
     res.status(200).json({

@@ -252,28 +252,35 @@ const deleteDebt = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const deletedData = await Debt.findOneAndDelete({
-      _id: req.params.id,
+    const debt = await Debt.findOne({
+      _id: id,
       userId: req.user.id,
     });
 
-    if (!deletedData) {
+    if (!debt) {
       return res.status(404).json({
         status: "Error",
         message: "Data tidak ditemukan",
       });
     }
 
+    const debtName = debt.customerName;
+    const debtAmount = debt.amount;
+    const userId = req.user.id;
+
     // notifikasi
     await createNotification(
       userId,
       `Hutang/Piutang Dihapus`,
-      `Hutang/Piutang oleh ${customerName} sebesar Rp${amount} telah dihapus`
+      `Hutang/Piutang oleh ${debtName} sebesar Rp${debtAmount} telah dihapus`
     );
+
+    // hapus data
+    await Debt.deleteOne({ _id: id });
 
     res.status(200).json({
       status: "Success",
-      message: `Data dengan id ${req.params.id} berhasil dihapus`,
+      message: `Data dengan id ${id} berhasil dihapus`,
     });
   } catch (err) {
     res.status(500).json({

@@ -387,6 +387,8 @@ const deleteMenu = async (req, res) => {
       });
     }
 
+    const menuName = menu.name;
+
     // soft delete
     menu.isDeleted = true;
     await menu.save();
@@ -395,7 +397,7 @@ const deleteMenu = async (req, res) => {
     await createNotification(
       req.user.id,
       "Menu dihapus",
-      `Menu '${name}' berhasil dihapus`
+      `Menu '${menuName}' berhasil dihapus`
     );
 
     res.status(200).json({
