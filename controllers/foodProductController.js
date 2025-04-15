@@ -198,10 +198,11 @@ const updateFoodProduct = async (req, res) => {
     await foodProduct.save();
 
     // notifikasi
-    // await Notification.create({
-    //   userId: req.user.id,
-    //   message: `Bahan baku ${foodProduct.name} berhasil diperbarui`,
-    // });
+    await createNotification(
+      req.user.id,
+      "Bahan Baku Diperbarui",
+      `Bahan baku ${name} berhasil diperbarui sebanyak ${stock} ${unit}`
+    );
 
     res.status(200).json({
       status: "Success",
@@ -248,10 +249,11 @@ const deleteFoodProduct = async (req, res) => {
     await foodProduct.deleteOne();
 
     // notifikasi
-    // await Notification.create({
-    //   userId: req.user.id,
-    //   message: `Bahan baku ${foodProduct.name} berhasil dihapus`,
-    // });
+    await createNotification(
+      req.user.id,
+      "Bahan Baku Dihapus",
+      `Bahan baku ${name} berhasil dihapus`
+    );
 
     res.status(200).json({
       status: "Success",
