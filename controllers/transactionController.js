@@ -119,6 +119,13 @@ const createTransaction = async (req, res) => {
 
     await newTransaction.save();
 
+    // notifikasi
+    await createNotification(
+      req.user.id,
+      "Transaksi baru ditambahkan",
+      `Transaksi baru pada tanggal ${date} dengan customer '${customerName}' berhasil ditambahkan`
+    );
+
     return res.status(201).json({
       status: "Success",
       message: "Transaksi berhasil dibuat.",
@@ -292,6 +299,13 @@ const updateTransaction = async (req, res) => {
     // Simpan transaksi yang sudah diperbarui
     await existingTransaction.save();
 
+    // notifikasi
+    await createNotification(
+      req.user.id,
+      "Transaksi diperbarui",
+      `Transaksi pada customer '${customerName}' berhasil diperbarui`
+    );
+
     res.status(200).json({
       status: "Success",
       message: "Transaksi berhasil diperbarui",
@@ -342,6 +356,13 @@ const deleteTransaction = async (req, res) => {
     }
 
     await Transaction.findByIdAndDelete(id);
+
+    // notifikasi
+    await createNotification(
+      req.user.id,
+      "Transaksi dihapus",
+      `Transaksi berhasil dihapus`
+    );
 
     res.status(200).json({
       status: "Success",
