@@ -340,6 +340,13 @@ const updateMenu = async (req, res) => {
       { new: true }
     );
 
+    // notifikasi
+    await createNotification(
+      req.user.id,
+      "Menu diperbarui",
+      `Menu '${name}' berhasil diperbarui`
+    );
+
     res.status(200).json({
       status: "Success",
       message: "Menu berhasil diperbarui",
@@ -383,6 +390,13 @@ const deleteMenu = async (req, res) => {
     // soft delete
     menu.isDeleted = true;
     await menu.save();
+
+    // notifikasi
+    await createNotification(
+      req.user.id,
+      "Menu dihapus",
+      `Menu '${name}' berhasil dihapus`
+    );
 
     res.status(200).json({
       status: "Success",
