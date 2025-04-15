@@ -245,6 +245,8 @@ const deleteFoodProduct = async (req, res) => {
       });
     }
 
+    const foodProductName = foodProduct.name;
+
     // hapus food product
     await foodProduct.deleteOne();
 
@@ -252,7 +254,7 @@ const deleteFoodProduct = async (req, res) => {
     await createNotification(
       req.user.id,
       "Bahan Baku Dihapus",
-      `Bahan baku ${name} berhasil dihapus`
+      `Bahan baku '${foodProductName}' berhasil dihapus`
     );
 
     res.status(200).json({
