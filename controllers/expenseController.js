@@ -62,6 +62,7 @@ const createExpense = async (req, res) => {
 
     await expense.save();
 
+    // notifikasi
     await createNotification(
       userId,
       "Pengeluaran Baru",
@@ -264,10 +265,11 @@ const updateExpense = async (req, res) => {
       });
     }
 
+    // notifikasi
     await createNotification(
       req.user.id,
       "Pengeluaran Diperbarui",
-      `Pengeluaran sebesar Rp${expense.amount} telah diperbarui`
+      `Pengeluaran pada tanggal ${date} sebesar Rp${expense.amount} telah diperbarui`
     );
 
     res.status(200).json({
@@ -298,6 +300,13 @@ const deleteExpense = async (req, res) => {
         message: "Pengeluaran tidak ditemukan",
       });
     }
+
+    // notifikasi
+    await createNotification(
+      userId,
+      "Pengeluaran Dihapus",
+      `Pengeluaran pada tanggal ${date} sebesar Rp${amount} pada kategori ${category} telah dihapus`
+    );
 
     res.status(200).json({
       status: "Success",
