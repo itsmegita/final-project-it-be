@@ -180,6 +180,13 @@ const updateDebt = async (req, res) => {
       { new: true, runValidators: true }
     );
 
+    // notifikasi
+    await createNotification(
+      userId,
+      `Hutang/Piutang Diubah`,
+      `Hutang/Piutang oleh ${customerName} diubah`
+    );
+
     res.status(200).json({
       status: "Success",
       message: "Data hutang/piutang berhasil diperbarui",
@@ -256,6 +263,13 @@ const deleteDebt = async (req, res) => {
         message: "Data tidak ditemukan",
       });
     }
+
+    // notifikasi
+    await createNotification(
+      userId,
+      `Hutang/Piutang Dihapus`,
+      `Hutang/Piutang oleh ${customerName} sebesar Rp${amount} telah dihapus`
+    );
 
     res.status(200).json({
       status: "Success",
