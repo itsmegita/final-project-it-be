@@ -2,162 +2,207 @@ const fs = require("fs");
 const Transaction = require("../models/Transaction");
 const Menu = require("../models/Menu");
 const FoodProduct = require("../models/FoodProduct");
-const { exportToCSV } = require("../utils/exportToCSV");
 const { createNotification } = require("../utils/notificationHelper");
 const mongoose = require("mongoose");
 
-// konversi satuan ke unit terkecil
-const unitConversion = {
-  kg: 1000,
-  gram: 1,
-  liter: 1000,
-  ml: 1,
-  pcs: 1,
+const convertToBaseUnit = (quantity, fromUnit, toUnit) => {
+  const conversion = {
+    gram: { kg: (qty) => qty / 1000 },
+    kg: { gram: (qty) => qty * 1000 },
+    ml: { liter: (qty) => qty / 1000 },
+    liter: { ml: (qty) => qty * 1000 },
+    pcs: { pcs: (qty) => qty },
+  };
+  if (fromUnit === toUnit) return quantity;
+  const converter = conversion[fromUnit]?.[toUnit];
+  if (!converter)
+    throw new Error(`Konversi dari ${fromUnit} ke ${toUnit} tidak didukung`);
+  return converter(quantity);
 };
 
-// konversi stok ke unit terkecil
-const convertToSmallestUnit = (amount, unit) => {
-  return amount * (unitConversion[unit] || 1);
-};
-
-// konversi kembali ke unit asli
-const convertToBaseUnit = (amount, unit) => {
-  return amount / (unitConversion[unit] || 1);
-};
-
-// buat transaksi baru
 const createTransaction = async (req, res) => {
   try {
-    const { type, orderItems, transactionDate } = req.body;
+    const { orderItems, date, customerName } = req.body;
 
-    if (!type || !["Sale", "Purchase"].includes(type)) {
-      return res
-        .status(400)
-        .json({ status: "Error", message: "Jenis transaksi tidak valid" });
+    // Validasi dasar
+    if (!Array.isArray(orderItems) || orderItems.length === 0) {
+      return res.status(400).json({
+        status: "Error",
+        message:
+          "Daftar pesanan (orderItems) wajib diisi dan harus berupa array.",
+      });
     }
 
-    // Validasi orderItems
-    if (!orderItems || !Array.isArray(orderItems) || orderItems.length === 0) {
-      return res
-        .status(400)
-        .json({ status: "Error", message: "orderItems tidak boleh kosong" });
-    }
+    let totalAmount = 0;
+    const stockChanges = [];
 
+    // Proses setiap item pesanan
     for (const item of orderItems) {
-      if (
-        !item.menuItem ||
-        !item.menuItemType ||
-        !["Menu", "FoodProduct"].includes(item.menuItemType)
-      ) {
+      const { menuItem, quantity, price } = item;
+
+      if (!menuItem || !quantity || !price) {
         return res.status(400).json({
           status: "Error",
-          message: "menuItem dan menuItemType harus valid",
+          message:
+            "Setiap item pesanan harus memiliki menuItem, quantity, dan price.",
         });
       }
 
-      const model = item.menuItemType === "Menu" ? Menu : FoodProduct;
-      const menuItemData = await model.findById(item.menuItem);
-
-      if (!menuItemData) {
+      const menuData = await Menu.findOne({
+        _id: menuItem,
+        deletedAt: { $exists: false },
+      });
+      if (!menuData) {
         return res.status(404).json({
           status: "Error",
-          message: `ID ${item.menuItem} tidak ditemukan`,
+          message: `Menu dengan ID '${menuItem}' tidak ditemukan atau sudah dihapus.`,
         });
       }
 
-      // Jika Sale, kurangi stok bahan baku berdasarkan resep
-      if (type === "Sale") {
-        for (const ingredient of menuItemData.ingredients) {
-          const foodProduct = await FoodProduct.findById(
-            ingredient.foodProduct
-          );
-          if (foodProduct) {
-            foodProduct.stock -= ingredient.quantity * item.quantity;
-            await foodProduct.save();
-          }
-        }
-      }
+      totalAmount += price * quantity;
 
-      // Jika Purchase, tambahkan stok bahan baku
-      if (type === "Purchase") {
-        const foodProduct = await FoodProduct.findById(item.menuItem);
-        if (foodProduct) {
-          foodProduct.stock += item.quantity;
-          await foodProduct.save();
+      // Periksa stok bahan baku
+      for (const ingredient of menuData.ingredients) {
+        const foodProduct = await FoodProduct.findById(
+          ingredient.foodProductId
+        );
+        if (!foodProduct) continue;
+
+        if (!ingredient.unit || !foodProduct.unit) {
+          return res.status(400).json({
+            status: "Error",
+            message: `Unit tidak tersedia untuk bahan baku '${foodProduct.name}'.`,
+          });
         }
+
+        let totalUsed;
+        try {
+          totalUsed = convertToBaseUnit(
+            ingredient.quantity * quantity,
+            ingredient.unit,
+            foodProduct.unit
+          );
+        } catch (err) {
+          return res.status(400).json({
+            status: "Error",
+            message: err.message,
+          });
+        }
+
+        const remainingStock = foodProduct.stock - totalUsed;
+
+        if (remainingStock < 0) {
+          return res.status(400).json({
+            status: "Error",
+            message: `Stok '${foodProduct.name}' tidak mencukupi untuk menu '${menuData.name}'.`,
+          });
+        }
+
+        stockChanges.push({ foodProduct, newStock: remainingStock });
       }
     }
 
+    // Simpan perubahan stok
+    for (const change of stockChanges) {
+      change.foodProduct.stock = change.newStock;
+      await change.foodProduct.save();
+    }
+
+    // Simpan transaksi
     const newTransaction = new Transaction({
-      type,
+      userId: req.user.id,
+      customerName: customerName?.trim() || "Pelanggan Umum",
+      date: date || new Date(),
       orderItems,
-      transactionDate,
+      amount: totalAmount,
     });
 
     await newTransaction.save();
 
-    res.status(201).json({
+    return res.status(201).json({
       status: "Success",
-      message: "Transaksi berhasil dibuat",
+      message: "Transaksi berhasil dibuat.",
       transaction: newTransaction,
     });
-  } catch (error) {
-    res.status(500).json({ status: "Error", message: error.message });
-  }
-};
-
-// get semua transaksi
-const getTransactions = async (req, res) => {
-  try {
-    const {
-      type,
-      sortBy = "transactionDate",
-      order = "desc",
-      page = 1,
-      limit = 10,
-    } = req.query;
-    const filter = {};
-    if (type) filter.type = type;
-    const options = {
-      sort: { [sortBy]: order === "desc" ? -1 : 1 },
-      skip: (page - 1) * limit,
-      limit: parseInt(limit),
-    };
-    const transactions = await Transaction.find(filter, null, options).populate(
-      "orderItems.menuItem"
-    );
-    const total = await Transaction.countDocuments(filter);
-
-    res.status(200).json({
-      status: "Success",
-      message: "Data transaksi berhasil diambil",
-      data: transactions,
-      total,
-      page,
-      limit,
-    });
   } catch (err) {
-    res.status(500).json({
+    console.error("Create Transaction Error:", err);
+    return res.status(500).json({
       status: "Error",
-      message: "Terjadi kesalahan saat mengambil transaksi",
+      message: "Terjadi kesalahan pada server.",
       error: err.message,
     });
   }
 };
 
-// get 1 transaksi by id
+const getTransactions = async (req, res) => {
+  try {
+    const { page = 1, limit = 5, month, year } = req.query;
+
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const limitNum = Math.max(parseInt(limit, 10) || 5, 1);
+
+    if (month && (isNaN(month) || month < 1 || month > 12)) {
+      return res.status(400).json({
+        status: "Error",
+        message: "Parameter 'month' harus antara 1 sampai 12",
+      });
+    }
+
+    if (year && isNaN(year)) {
+      return res.status(400).json({
+        status: "Error",
+        message: "Parameter 'year' harus berupa angka",
+      });
+    }
+
+    const filter = {};
+    if (month && year) {
+      const start = new Date(Number(year), Number(month) - 1, 1);
+      const end = new Date(Number(year), Number(month), 0);
+      end.setHours(23, 59, 59, 999);
+      filter.date = { $gte: start, $lte: end };
+    }
+
+    const totalCount = await Transaction.countDocuments(filter);
+    const transactions = await Transaction.find(filter)
+      .sort({ date: -1, _id: -1 })
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum)
+      .populate("orderItems.menuItem");
+
+    const totalIncome = transactions.reduce((sum, trx) => sum + trx.amount, 0);
+
+    return res.status(200).json({
+      status: "Success",
+      data: {
+        transactions,
+        totalIncome,
+        totalData: totalCount,
+        pagination: {
+          totalPages: Math.ceil(totalCount / limitNum),
+          currentPage: pageNum,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error getTransactions:", error);
+    return res.status(500).json({
+      status: "Error",
+      message: "Gagal mengambil transaksi",
+    });
+  }
+};
+
 const getTransactionById = async (req, res) => {
   try {
     const transaction = await Transaction.findById(req.params.id).populate(
       "orderItems.menuItem"
     );
     if (!transaction) {
-      return res.status(404).json({
-        status: "Error",
-        message: "Transaction not found",
-      });
+      return res
+        .status(404)
+        .json({ status: "Error", message: "Transaction not found" });
     }
-
     res.status(200).json({
       status: "Success",
       message: `Transaksi dengan id ${req.params.id} ditemukan`,
@@ -172,13 +217,11 @@ const getTransactionById = async (req, res) => {
   }
 };
 
-// update transaksi
 const updateTransaction = async (req, res) => {
   try {
     const { id } = req.params;
-    const { type, orderItems, transactionDate } = req.body;
+    const { orderItems, date, customerName } = req.body;
 
-    // 🛑 Ambil transaksi lama
     const existingTransaction = await Transaction.findById(id);
     if (!existingTransaction) {
       return res
@@ -186,105 +229,68 @@ const updateTransaction = async (req, res) => {
         .json({ status: "Error", message: "Transaksi tidak ditemukan" });
     }
 
-    // 🔄 Rollback stok dari transaksi lama
+    // Kembalikan stok bahan baku dari transaksi lama
     for (const oldItem of existingTransaction.orderItems) {
-      if (oldItem.menuItemType === "Menu") {
-        const menuData = await Menu.findById(oldItem.menuItem);
-        if (menuData) {
-          for (const ingredient of menuData.ingredients) {
-            const foodProduct = await FoodProduct.findById(
-              ingredient.foodProduct
-            );
-            if (foodProduct) {
-              // Jika transaksi lama adalah Sale, stok harus dikembalikan
-              if (existingTransaction.type === "Sale") {
-                foodProduct.stock += ingredient.quantity * oldItem.quantity;
-              }
-              // Jika transaksi lama adalah Purchase, stok harus dikurangi
-              else if (existingTransaction.type === "Purchase") {
-                foodProduct.stock -= ingredient.quantity * oldItem.quantity;
-              }
-              await foodProduct.save();
-            }
-          }
-        }
-      } else if (oldItem.menuItemType === "FoodProduct") {
-        const foodProduct = await FoodProduct.findById(oldItem.menuItem);
-        if (foodProduct) {
-          // Jika transaksi lama adalah Sale, stok dikembalikan
-          if (existingTransaction.type === "Sale") {
-            foodProduct.stock += oldItem.quantity;
-          }
-          // Jika transaksi lama adalah Purchase, stok dikurangi
-          else if (existingTransaction.type === "Purchase") {
-            foodProduct.stock -= oldItem.quantity;
-          }
-          await foodProduct.save();
-        }
-      }
-    }
-
-    // 🆕 Update transaksi dengan data baru
-    existingTransaction.type = type || existingTransaction.type;
-    existingTransaction.orderItems =
-      orderItems || existingTransaction.orderItems;
-    existingTransaction.transactionDate =
-      transactionDate || existingTransaction.transactionDate;
-    await existingTransaction.save();
-
-    // 🔄 Update stok berdasarkan transaksi yang sudah diperbarui
-    for (const newItem of existingTransaction.orderItems) {
-      if (
-        !newItem.menuItem ||
-        !newItem.menuItemType ||
-        !["Menu", "FoodProduct"].includes(newItem.menuItemType)
-      ) {
-        return res.status(400).json({
-          status: "Error",
-          message: "menuItem dan menuItemType harus valid",
-        });
-      }
-
-      const model = newItem.menuItemType === "Menu" ? Menu : FoodProduct;
-      const menuItemData = await model.findById(newItem.menuItem);
-
-      if (!menuItemData) {
-        return res.status(404).json({
-          status: "Error",
-          message: `ID ${newItem.menuItem} tidak ditemukan`,
-        });
-      }
-
-      if (existingTransaction.type === "Sale") {
-        // Jika transaksi baru adalah Sale, stok dikurangi
-        if (newItem.menuItemType === "Menu") {
-          for (const ingredient of menuItemData.ingredients) {
-            const foodProduct = await FoodProduct.findById(
-              ingredient.foodProduct
-            );
-            if (foodProduct) {
-              foodProduct.stock -= ingredient.quantity * newItem.quantity;
-              await foodProduct.save();
-            }
-          }
-        } else if (newItem.menuItemType === "FoodProduct") {
-          const foodProduct = await FoodProduct.findById(newItem.menuItem);
+      const menuData = await Menu.findById(oldItem.menuItem);
+      if (menuData) {
+        for (const ingredient of menuData.ingredients) {
+          const foodProduct = await FoodProduct.findById(
+            ingredient.foodProductId
+          );
           if (foodProduct) {
-            foodProduct.stock -= newItem.quantity;
+            const restored = convertToBaseUnit(
+              ingredient.quantity * oldItem.quantity,
+              ingredient.unit,
+              foodProduct.unit
+            );
+            foodProduct.stock += restored;
             await foodProduct.save();
           }
         }
       }
+    }
 
-      if (existingTransaction.type === "Purchase") {
-        // Jika transaksi baru adalah Purchase, stok ditambahkan
-        const foodProduct = await FoodProduct.findById(newItem.menuItem);
-        if (foodProduct) {
-          foodProduct.stock += newItem.quantity;
-          await foodProduct.save();
-        }
+    // Perbarui data transaksi
+    existingTransaction.orderItems =
+      orderItems || existingTransaction.orderItems;
+    existingTransaction.date = date || existingTransaction.date;
+    existingTransaction.customerName =
+      customerName || existingTransaction.customerName;
+
+    // Kurangi stok sesuai transaksi baru
+    for (const item of existingTransaction.orderItems) {
+      const menuItemData = await Menu.findById(item.menuItem);
+      if (!menuItemData) continue;
+
+      for (const ingredient of menuItemData.ingredients) {
+        const foodProduct = await FoodProduct.findById(
+          ingredient.foodProductId
+        );
+        if (!foodProduct) continue;
+
+        const used = convertToBaseUnit(
+          ingredient.quantity * item.quantity,
+          ingredient.unit,
+          foodProduct.unit
+        );
+        foodProduct.stock -= used;
+        if (foodProduct.stock < 0)
+          return res.status(400).json({
+            status: "Error",
+            message: `Stok ${foodProduct.name} tidak cukup.`,
+          });
+        await foodProduct.save();
       }
     }
+
+    // Hitung ulang total amount
+    existingTransaction.amount = existingTransaction.orderItems.reduce(
+      (total, item) => total + item.quantity * item.price,
+      0
+    );
+
+    // Simpan transaksi yang sudah diperbarui
+    await existingTransaction.save();
 
     res.status(200).json({
       status: "Success",
@@ -296,7 +302,6 @@ const updateTransaction = async (req, res) => {
   }
 };
 
-// delete transaksi
 const deleteTransaction = async (req, res) => {
   try {
     const { id } = req.params;
@@ -309,105 +314,44 @@ const deleteTransaction = async (req, res) => {
 
     const transaction = await Transaction.findById(id);
     if (!transaction) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Transaction not found" });
-    }
-
-    // 🔄 Rollback stok sebelum menghapus transaksi
-    for (const item of transaction.orderItems) {
-      if (!item.menuItem || !item.menuItemType) continue;
-
-      if (item.menuItemType === "Menu") {
-        const menu = await Menu.findById(item.menuItem);
-        if (!menu) continue;
-
-        for (const ingredient of menu.ingredients) {
-          const foodProduct = await FoodProduct.findById(
-            ingredient.foodProduct
-          );
-          if (!foodProduct) continue;
-
-          if (transaction.type === "Sale") {
-            // Jika transaksi adalah penjualan, stok dikembalikan
-            foodProduct.stock += ingredient.quantity * item.quantity;
-          } else if (transaction.type === "Purchase") {
-            // Jika transaksi adalah pembelian, stok dikurangi
-            foodProduct.stock -= ingredient.quantity * item.quantity;
-          }
-
-          await foodProduct.save();
-        }
-      } else if (item.menuItemType === "FoodProduct") {
-        const foodProduct = await FoodProduct.findById(item.menuItem);
-        if (!foodProduct) continue;
-
-        if (transaction.type === "Sale") {
-          // Jika transaksi adalah penjualan, stok dikembalikan
-          foodProduct.stock += item.quantity;
-        } else if (transaction.type === "Purchase") {
-          // Jika transaksi adalah pembelian, stok dikurangi
-          foodProduct.stock -= item.quantity;
-        }
-
-        await foodProduct.save();
-      }
-    }
-
-    // 🚮 Hapus transaksi setelah stok diperbaiki
-    await transaction.deleteOne();
-
-    res.status(200).json({
-      status: "Success",
-      message: "Transaksi berhasil dihapus dan stok diperbarui",
-    });
-  } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: "Terjadi kesalahan saat menghapus transaksi",
-      error: err.message,
-    });
-  }
-};
-
-// export transaction ke csv
-const exportTransactionsToCSV = async (req, res) => {
-  try {
-    const transactions = await Transaction.find({ userId: req.user.id }).lean();
-
-    if (!transactions.length) {
       return res.status(404).json({
         status: "Error",
-        message: "Tidak ada transaksi untuk diekspor",
+        message: `Tidak menemukan transaksi dengan id ${id}`,
       });
     }
 
-    const fileName = `transactions-${Date.now()}.csv`;
-    const filePath = await exportToCSV(transactions, fileName);
-
-    console.log(`File CSV tersedia di: ${filePath}`);
-
-    res.download(filePath, fileName, (err) => {
-      if (err) {
-        console.error("Kesalahan saat mengunduh CSV:", err);
-        res.status(500).json({
-          status: "Error",
-          message: "Terjadi kesalahan saat mengunduh CSV",
-        });
+    // Restore stok
+    for (const item of transaction.orderItems) {
+      const menuData = await Menu.findById(item.menuItem);
+      if (menuData) {
+        for (const ingredient of menuData.ingredients) {
+          const foodProduct = await FoodProduct.findById(
+            ingredient.foodProductId
+          );
+          if (foodProduct) {
+            const restored = convertToBaseUnit(
+              ingredient.quantity * item.quantity,
+              ingredient.unit,
+              foodProduct.unit
+            );
+            foodProduct.stock += restored;
+            await foodProduct.save();
+          }
+        }
       }
-      // Jangan langsung hapus file, beri delay untuk memastikan berhasil di-download
-      setTimeout(() => {
-        fs.unlink(filePath, (err) => {
-          if (err) console.error("Gagal menghapus file:", err);
-          else console.log("File CSV dihapus setelah diunduh.");
-        });
-      }, 30 * 60 * 1000);
+    }
+
+    await Transaction.findByIdAndDelete(id);
+
+    res.status(200).json({
+      status: "Success",
+      message: "Transaksi berhasil dihapus",
     });
-  } catch (err) {
-    console.error("Terjadi kesalahan server:", err);
+  } catch (error) {
+    console.error("Delete transaction error:", error);
     res.status(500).json({
       status: "Error",
-      message: "Gagal mengekspor file csv",
+      message: "Gagal menghapus transaksi",
       error: err.message,
     });
   }
@@ -419,5 +363,4 @@ module.exports = {
   getTransactionById,
   updateTransaction,
   deleteTransaction,
-  exportTransactionsToCSV,
 };

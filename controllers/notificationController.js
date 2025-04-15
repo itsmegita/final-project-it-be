@@ -4,14 +4,30 @@ const Notification = require("../models/Notification");
 // mengambil data semua notifikasi
 const getNotifications = async (req, res) => {
   try {
-    const notifications = await Notification.find({
-      userId: req.user.id,
-    }).sort({ createdAt: -1 });
+    const { page = 1, limit = 5 } = req.query;
+    const skip = (page - 1) * limit;
+
+    const [notifications, totalItems] = await Promise.all([
+      Notification.find({ userId: req.user.id })
+        .sort({ createdAt: -1 })
+        .skip(Number(skip))
+        .limit(Number(limit)),
+      Notification.countDocuments({ userId: req.user.id }),
+    ]);
+
+    const totalPages = Math.ceil(totalItems / limit);
 
     res.status(200).json({
       status: "Success",
       message: "Berhasil mendapatkan notifikasi",
-      data: notifications,
+      data: {
+        notifications,
+        pagination: {
+          currentPage: Number(page),
+          totalPages,
+          totalItems,
+        },
+      },
     });
   } catch (err) {
     res.status(500).json({

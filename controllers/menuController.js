@@ -9,7 +9,7 @@ const createMenu = async (req, res) => {
   try {
     const { name, category, price, ingredients } = req.body;
 
-    // validasi
+    // Validasi nama
     if (!name || name.length < 3 || name.length > 100) {
       return res.status(400).json({
         status: "Error",
@@ -17,6 +17,7 @@ const createMenu = async (req, res) => {
       });
     }
 
+    // Validasi kategori
     if (!category || !["Makanan", "Minuman"].includes(category)) {
       return res.status(400).json({
         status: "Error",
@@ -24,60 +25,69 @@ const createMenu = async (req, res) => {
       });
     }
 
-    if (!price || isNaN(price) || price < 0) {
+    // Validasi harga
+    if (price === undefined || isNaN(price) || price < 0) {
       return res.status(400).json({
         status: "Error",
         message: "Harga harus berupa angka dan tidak boleh negatif",
       });
     }
 
-    if (
-      !ingredients ||
-      !Array.isArray(ingredients) ||
-      ingredients.length === 0
-    ) {
+    // Validasi bahan baku
+    if (!Array.isArray(ingredients) || ingredients.length === 0) {
       return res.status(400).json({
         status: "Error",
         message: "Ingredients harus berupa array dan tidak boleh kosong",
       });
     }
 
-    // proses pencarain id bahan baku
+    const allowedUnits = ["gram", "kg", "ml", "liter", "pcs"];
     const updatedIngredients = [];
-    for (let item of ingredients) {
-      let foodProduct;
 
+    for (let item of ingredients) {
       if (!item.foodProductId) {
         return res.status(400).json({
           status: "Error",
-          message: "Setiap bahan baku harus memiliki nama",
+          message: "Setiap bahan baku harus memiliki ID atau nama",
         });
       }
 
-      // jika foodproduct adalah objectid yang valid, cari berdasarkan id
+      let foodProduct;
       if (ObjectId.isValid(item.foodProductId)) {
         foodProduct = await FoodProduct.findById(item.foodProductId);
       } else {
-        // jika bukan obejctid, cari berdasarkan nama bahan baku
         foodProduct = await FoodProduct.findOne({ name: item.foodProductId });
       }
 
-      // jika bahan baku tidak ditemukan
       if (!foodProduct) {
         return res.status(400).json({
           status: "Error",
-          message: `Bahan baku '${item.foodProductId}' tidak ditemukan di database`,
+          message: `Bahan baku '${item.foodProductId}' tidak ditemukan`,
         });
       }
 
-      // tambahkan ke array ingredients dengan id yang benar
+      if (!item.quantity || isNaN(item.quantity) || item.quantity <= 0) {
+        return res.status(400).json({
+          status: "Error",
+          message: "Jumlah bahan baku harus valid dan lebih dari 0",
+        });
+      }
+
+      if (!item.unit || !allowedUnits.includes(item.unit)) {
+        return res.status(400).json({
+          status: "Error",
+          message: `Unit tidak valid atau tidak tersedia untuk bahan baku '${foodProduct.name}'`,
+        });
+      }
+
       updatedIngredients.push({
         foodProductId: foodProduct._id,
         quantity: item.quantity,
+        unit: item.unit,
       });
     }
 
-    // simpan ke database
+    // Simpan menu
     const newMenu = new Menu({
       userId: req.user.id,
       name,
@@ -85,9 +95,10 @@ const createMenu = async (req, res) => {
       price,
       ingredients: updatedIngredients,
     });
+
     await newMenu.save();
 
-    // notifikasi
+    // Notifikasi
     await createNotification(
       req.user.id,
       "Menu baru ditambahkan",
@@ -111,10 +122,10 @@ const createMenu = async (req, res) => {
 // ambil semua menu
 const getMenus = async (req, res) => {
   try {
-    const menus = await Menu.find({ userId: req.user.id }).populate(
-      "ingredients.foodProductId",
-      "name"
-    );
+    const menus = await Menu.find({
+      userId: req.user.id,
+      isDeleted: false,
+    }).populate("ingredients.foodProductId", "name");
 
     if (!menus.length) {
       return res.status(200).json({
@@ -151,7 +162,11 @@ const getMenu = async (req, res) => {
       });
     }
 
-    const menu = await Menu.findOne({ _id: id, userId: req.user.id });
+    const menu = await Menu.findOne({
+      _id: id,
+      userId: req.user.id,
+      isDeleted: false,
+    });
 
     if (!menu) {
       return res.status(404).json({
@@ -180,7 +195,7 @@ const updateMenu = async (req, res) => {
     const { name, category, price, ingredients } = req.body;
     const { id } = req.params;
 
-    // validasi id
+    // validasi ID menu
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         status: "Error",
@@ -189,8 +204,9 @@ const updateMenu = async (req, res) => {
     }
 
     const menu = await Menu.findOne({
-      _id: req.params.id,
+      _id: id,
       userId: req.user.id,
+      isDeleted: false,
     });
 
     if (!menu) {
@@ -200,104 +216,134 @@ const updateMenu = async (req, res) => {
       });
     }
 
-    // validasi data yang di update
+    // validasi nama
     if (name && (name.length < 3 || name.length > 100)) {
       return res.status(400).json({
         status: "Error",
         message: "Nama menu harus antara 3 - 100 karakter",
       });
     }
-    if (category && !["Makanan", "Minuman", "Lainnya"].includes(category)) {
+
+    // validasi kategori
+    if (category && !["Makanan", "Minuman"].includes(category)) {
       return res.status(400).json({
         status: "Error",
-        message: "Kategori harus berupa Makanan, Minuman, atau Lainnya",
+        message: "Kategori harus berupa Makanan atau Minuman",
       });
     }
+
+    // validasi harga
     if (price !== undefined && (isNaN(price) || price < 0)) {
       return res.status(400).json({
         status: "Error",
         message: "Harga harus angka dan tidak boleh negatif",
       });
     }
-    if (ingredients && !Array.isArray(ingredients)) {
-      return res.status(400).json({
-        status: "Error",
-        message: "Ingredients harus berupa array",
-      });
-    }
 
-    // simpan ingredients lama untuk rollback jika ada perubahan
-    const oldIngredients = menu.ingredients || [];
+    const allowedUnits = ["gram", "kg", "ml", "liter", "pcs"];
+    let updatedIngredients = [];
 
-    // proses update ingredients dan update stok bahan baku
+    // proses update ingredients
     if (ingredients) {
+      if (!Array.isArray(ingredients) || ingredients.length === 0) {
+        return res.status(400).json({
+          status: "Error",
+          message: "Ingredients harus berupa array dan tidak boleh kosong",
+        });
+      }
+
       // kembalikan stok dari ingredients lama
-      for (const oldIng of oldIngredients) {
+      for (const oldIng of menu.ingredients) {
         const foodProduct = await FoodProduct.findOne({
           _id: oldIng.foodProductId,
           userId: req.user.id,
         });
-
         if (foodProduct) {
           foodProduct.stock += oldIng.quantity;
           await foodProduct.save();
         }
       }
 
-      // kurangi stok berdasarkan ingredients baru
-      for (const newIng of ingredients) {
-        let foodProduct = await FoodProduct.findOne({
-          _id: newIng.foodProductId,
-          userOd: req.user.id,
-        });
+      // proses validasi & update stok ingredients baru
+      for (const item of ingredients) {
+        if (!item.foodProductId) {
+          return res.status(400).json({
+            status: "Error",
+            message: "Setiap bahan baku harus memiliki ID atau nama",
+          });
+        }
 
-        // jika foodProductId tidak ada, cari berdasarkan nama bahan baku
-        if (!foodProduct) {
+        let foodProduct;
+        if (mongoose.Types.ObjectId.isValid(item.foodProductId)) {
           foodProduct = await FoodProduct.findOne({
-            name: newIng.name,
+            _id: item.foodProductId,
+            userId: req.user.id,
+          });
+        } else {
+          foodProduct = await FoodProduct.findOne({
+            name: item.foodProductId,
             userId: req.user.id,
           });
         }
 
-        // jika bahan baku ditemukan, kurangi stok
-        if (foodProduct) {
-          if (foodProduct.stock < newIng.quantity) {
-            return res.status(400).json({
-              status: "Error",
-              message: `Stock ${foodProduct.name} tidak cukup`,
-            });
-          }
-
-          foodProduct.stock -= newIng.quantity;
-          await foodProduct.save();
-        } else {
+        if (!foodProduct) {
           return res.status(400).json({
             status: "Error",
-            message: `Bahan baku ${newIng.name} tidak ditemukan`,
+            message: `Bahan baku '${item.foodProductId}' tidak ditemukan`,
           });
         }
+
+        if (!item.quantity || isNaN(item.quantity) || item.quantity <= 0) {
+          return res.status(400).json({
+            status: "Error",
+            message: "Jumlah bahan baku harus valid dan lebih dari 0",
+          });
+        }
+
+        if (!item.unit || !allowedUnits.includes(item.unit)) {
+          return res.status(400).json({
+            status: "Error",
+            message: `Unit tidak valid atau tidak tersedia untuk bahan baku '${foodProduct.name}'`,
+          });
+        }
+
+        if (foodProduct.stock < item.quantity) {
+          return res.status(400).json({
+            status: "Error",
+            message: `Stok '${foodProduct.name}' tidak cukup`,
+          });
+        }
+
+        // kurangi stok
+        foodProduct.stock -= item.quantity;
+        await foodProduct.save();
+
+        updatedIngredients.push({
+          foodProductId: foodProduct._id,
+          quantity: item.quantity,
+          unit: item.unit,
+        });
       }
     }
 
-    // update data
-    menu.name = name || menu.name;
-    menu.category = category || menu.category;
-    menu.price = price !== undefined ? price : menu.price;
-    menu.ingredients = ingredients || menu.ingredients;
-
-    await menu.save();
-
-    // notifikasi
-    await createNotification(
-      req.user.id,
-      "Menu diperbarui",
-      `Menu '${menu.name}' berhasil diperbarui`
+    // update menu
+    const updatedMenu = await Menu.findByIdAndUpdate(
+      id,
+      {
+        name: name || menu.name,
+        category: category || menu.category,
+        price: price || menu.price,
+        ingredients: updatedIngredients.length
+          ? updatedIngredients
+          : menu.ingredients,
+      },
+      { new: true }
     );
 
     res.status(200).json({
       status: "Success",
       message: "Menu berhasil diperbarui",
-      data: menu,
+      data: updatedMenu,
     });
   } catch (err) {
     res.status(500).json({
@@ -308,12 +354,12 @@ const updateMenu = async (req, res) => {
   }
 };
 
-// hapus menu
+// delete menu
 const deleteMenu = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // validasi id
+    // validasi ID menu
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         status: "Error",
@@ -322,8 +368,9 @@ const deleteMenu = async (req, res) => {
     }
 
     const menu = await Menu.findOne({
-      _id: req.params.id,
+      _id: id,
       userId: req.user.id,
+      isDeleted: false,
     });
 
     if (!menu) {
@@ -333,18 +380,13 @@ const deleteMenu = async (req, res) => {
       });
     }
 
-    await menu.deleteOne();
-
-    // notifikasi
-    await createNotification(
-      req.user.id,
-      "Menu dihapus",
-      `Menu '${menu.name}' berhasil dihapus`
-    );
+    // soft delete
+    menu.isDeleted = true;
+    await menu.save();
 
     res.status(200).json({
       status: "Success",
-      message: "Menu berhasil dihapus",
+      message: `Menu dengan id ${id} berhasil dihapus`,
     });
   } catch (err) {
     res.status(500).json({

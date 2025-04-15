@@ -6,25 +6,23 @@ const getDashboardData = async (req, res) => {
     const userId = req.user.id;
     const year = parseInt(req.query.year) || new Date().getFullYear();
 
-    // Dapatkan semua tahun yang tersedia (dari transaksi dan pengeluaran)
+    // Ambil tahun unik dari transaksi dan pengeluaran
     const transactionYears = await Transaction.find({ userId }).distinct(
       "date"
     );
     const expenseYears = await Expense.find({ userId }).distinct("date");
 
-    // Gabungkan dan ambil tahun unik
     const allYears = [...transactionYears, ...expenseYears].map((d) =>
       new Date(d).getFullYear()
     );
     const availableYears = [...new Set(allYears)].sort((a, b) => b - a);
 
-    // Filter transaksi dan pengeluaran berdasarkan tahun yang diminta
+    // Filter transaksi dan pengeluaran berdasarkan tahun
     const startDate = new Date(`${year}-01-01`);
     const endDate = new Date(`${year}-12-31T23:59:59.999`);
 
-    const sales = await Transaction.find({
+    const transactions = await Transaction.find({
       userId,
-      type: "Sale",
       date: { $gte: startDate, $lte: endDate },
     });
 
@@ -33,20 +31,19 @@ const getDashboardData = async (req, res) => {
       date: { $gte: startDate, $lte: endDate },
     });
 
-    // Hitung total income dan expense
-    const totalIncome = sales.reduce((sum, trx) => sum + (trx.amount || 0), 0);
+    // Total income & expense
+    const totalIncome = transactions.reduce(
+      (sum, trx) => sum + (trx.amount || 0),
+      0
+    );
     const totalExpense = expenses.reduce(
       (sum, exp) => sum + (exp.amount || 0),
       0
     );
     const balance = totalIncome - totalExpense;
 
-    // Hitung kategori terbanyak
+    // Tidak ada lagi category di transaction, hanya ambil dari expenses
     const categoryCount = {};
-    sales.forEach((trx) => {
-      const category = trx.category || "Uncategorized";
-      categoryCount[category] = (categoryCount[category] || 0) + 1;
-    });
     expenses.forEach((exp) => {
       const category = exp.category || "Uncategorized";
       categoryCount[category] = (categoryCount[category] || 0) + 1;
@@ -58,10 +55,10 @@ const getDashboardData = async (req, res) => {
         )
       : "Tidak Ada Data";
 
-    // Data grafik per bulan
+    // Grafik per bulan
     const monthlyData = {};
 
-    sales.forEach((trx) => {
+    transactions.forEach((trx) => {
       if (trx.date) {
         const month = trx.date.getMonth();
         if (!monthlyData[month]) monthlyData[month] = { income: 0, expense: 0 };
@@ -77,7 +74,6 @@ const getDashboardData = async (req, res) => {
       }
     });
 
-    // Konversi data bulanan ke array
     const monthNames = [
       "Januari",
       "Februari",
