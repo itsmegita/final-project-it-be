@@ -269,7 +269,7 @@ const updateExpense = async (req, res) => {
     await createNotification(
       req.user.id,
       "Pengeluaran Diperbarui",
-      `Pengeluaran pada tanggal ${date} sebesar Rp${expense.amount} telah diperbarui`
+      `Pengeluaran pada tanggal ${date} sebesar Rp${expense.amount} pada kategori ${category} telah diperbarui`
     );
 
     res.status(200).json({
@@ -301,11 +301,16 @@ const deleteExpense = async (req, res) => {
       });
     }
 
+    const expenseDate = expense.date.toISOString().split("T")[0];
+    const expenseAmount = expense.amount;
+    const expenseCategory = expense.category;
+    const userId = req.user.id;
+
     // notifikasi
     await createNotification(
       userId,
       "Pengeluaran Dihapus",
-      `Pengeluaran pada tanggal ${date} sebesar Rp${amount} pada kategori ${category} telah dihapus`
+      `Pengeluaran pada tanggal ${expenseDate} sebesar Rp${expenseAmount} dengan kategori ${expenseCategory} telah dihapus`
     );
 
     res.status(200).json({
