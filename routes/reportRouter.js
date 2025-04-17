@@ -3,12 +3,16 @@ const {
   generateProfitLossReport,
   generateCashFlowReport,
   generateFinancialSummaryReport,
+  generateFinancialPositionReport,
+  generateDailyCashBookReport,
 } = require("../controllers/repotController");
 const protect = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
 router.get("/profit-loss", protect, generateProfitLossReport);
+router.get("/financial-position", protect, generateFinancialPositionReport);
+router.get("/cash-book", protect, generateDailyCashBookReport);
 router.get("/cash-flow", protect, generateCashFlowReport);
 router.get("/transaction-summary", protect, generateFinancialSummaryReport);
 

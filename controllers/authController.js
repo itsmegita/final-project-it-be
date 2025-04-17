@@ -14,7 +14,7 @@ const sendOTP = async (user, type = "verifikasi") => {
   const subject = "[No Reply] - Kode OTP Verifikasi";
   const textContent = `Dear ${User.name},
 
-Terima kasih telah mendaftar di Cura-Cents. Untuk mengaktifkan akun anda, silahkan gunakan One-Time Password (OTP) berikut:
+Terima kasih telah mendaftar di OmzetDapur. Untuk mengaktifkan akun anda, silahkan gunakan One-Time Password (OTP) berikut:
 
 Kode OTP: ${otp}
 
@@ -23,7 +23,7 @@ Kode OTP ini berlaku selama 1 menit. Jika kode OTP kadaluarsa, anda bisa request
 Terima kasih atas perhatiannya
 
 Salam hangat,
-Cura Cents`;
+OmzetDapur`;
 
   const htmlContent = `<!DOCTYPE html>
 <html lang="en">
@@ -58,7 +58,7 @@ Cura Cents`;
           >
             <tr>
               <td style="text-align: center; padding: 20px 0">
-                <h1 style="margin: 0; color: #80b4d4">Cura-Cents</h1>
+                <h1 style="margin: 0; color: #80b4d4">OmzetDapur</h1>
               </td>
             </tr>
             <tr>
@@ -70,7 +70,7 @@ Cura Cents`;
                   color: #ffffff;
                 "
               >
-                <h1 style="margin: 0">Welcome to Cura-Cents!</h1>
+                <h1 style="margin: 0">Welcome to OmzetDapur!</h1>
               </td>
             </tr>
             <tr>
@@ -93,7 +93,7 @@ Cura Cents`;
                     color: #333333;
                   "
                 >
-                  Terima kasih telah mendaftar di Cura-Cents. Untuk mengaktifkan
+                  Terima kasih telah mendaftar di OmzetDapur. Untuk mengaktifkan
                   akun anda, silakan gunakan One-Time Password (OTP) berikut:
                 </p>
                 <p style="margin-top: 30px; text-align: center">
@@ -131,7 +131,7 @@ Cura Cents`;
                   <br />
                   <br />
                   <br />
-                  Cura-Cents
+                  OmzetDapur
                 </p>
               </td>
             </tr>
@@ -145,10 +145,10 @@ Cura Cents`;
                 "
               >
                 <p style="margin: 0; font-size: 12px">
-                  &copy; 2025 Cura-Cents. All rights reserved.
+                  &copy; 2025 OmzetDapur. All rights reserved.
                 </p>
                 <p style="margin: 10px 0 0 0; font-size: 12px">
-                  Cura-Cents Email System
+                  OmzetDapur Email System
                 </p>
               </td>
             </tr>
@@ -407,7 +407,7 @@ const forgotPassword = async (req, res) => {
 
         Salam hangat,
         
-        Cura-Cents`,
+        OmzetDapur`,
       `<!DOCTYPE html>
 <html lang="en">
   <body
@@ -441,7 +441,7 @@ const forgotPassword = async (req, res) => {
           >
             <tr>
               <td style="text-align: center; padding: 20px 0">
-                <h1 style="margin: 0; color: #80b4d4">Cura-Cents</h1>
+                <h1 style="margin: 0; color: #80b4d4">OmzetDapur</h1>
               </td>
             </tr>
             <tr>
@@ -453,7 +453,7 @@ const forgotPassword = async (req, res) => {
                   color: #ffffff;
                 "
               >
-                <h1 style="margin: 0">Welcome to Cura-Cents!</h1>
+                <h1 style="margin: 0">Welcome to OmzetDapur!</h1>
               </td>
             </tr>
             <tr>
@@ -517,7 +517,7 @@ const forgotPassword = async (req, res) => {
                   <br />
                   <br />
                   <br />
-                  Cura-Cents
+                  OmzetDapur
                 </p>
               </td>
             </tr>
@@ -531,10 +531,10 @@ const forgotPassword = async (req, res) => {
                 "
               >
                 <p style="margin: 0; font-size: 12px">
-                  &copy; 2025 Cura-Cents. All rights reserved.
+                  &copy; 2025 OmzetDapur. All rights reserved.
                 </p>
                 <p style="margin: 10px 0 0 0; font-size: 12px">
-                  Cura-Cents Email System
+                  OmzetDapur Email System
                 </p>
               </td>
             </tr>
