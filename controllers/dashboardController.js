@@ -1,5 +1,8 @@
 const Transaction = require("../models/Transaction");
 const Expense = require("../models/Expense");
+const Debt = require("../models/DebtReceivable");
+const FoodProduct = require("../models/FoodProduct");
+const mongoose = require("mongoose");
 
 const getDashboardData = async (req, res) => {
   try {
@@ -95,12 +98,96 @@ const getDashboardData = async (req, res) => {
       expense: monthlyData[i]?.expense || 0,
     }));
 
+    const topMenus = await Transaction.aggregate([
+      {
+        $match: {
+          userId: new mongoose.Types.ObjectId(userId),
+          date: { $gte: startDate, $lte: endDate },
+        },
+      },
+      { $unwind: "$orderItems" },
+      {
+        $group: {
+          _id: "$orderItems.menuItem",
+          totalSold: { $sum: "$orderItems.quantity" },
+        },
+      },
+      {
+        $lookup: {
+          from: "menus",
+          localField: "_id",
+          foreignField: "_id",
+          as: "menuInfo",
+        },
+      },
+      { $unwind: "$menuInfo" },
+      {
+        $project: {
+          _id: 0,
+          name: "$menuInfo.name",
+          totalSold: 1,
+        },
+      },
+      { $sort: { totalSold: -1 } },
+      { $limit: 5 },
+    ]);
+
+    // cek stok
+    const lowStockThreshold = 5;
+
+    const lowStocks = await FoodProduct.find({
+      userId,
+      stock: { $lte: lowStockThreshold },
+    }).select("name stock unit");
+
+    // reminder
+    const reminders = [];
+
+    // Reminder: stok menipis
+    if (lowStocks.length > 0) {
+      reminders.push("Beberapa bahan baku hampir habis. Segera restock.");
+    }
+
+    // Reminder: tidak ada transaksi minggu ini
+    const now = new Date();
+    const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
+    const endOfWeek = new Date(now.setDate(now.getDate() - now.getDay() + 6));
+
+    const transactionThisWeek = await Transaction.find({
+      userId,
+      date: { $gte: startOfWeek, $lte: endOfWeek },
+    });
+
+    if (transactionThisWeek.length === 0) {
+      reminders.push("Belum ada transaksi minggu ini.");
+    }
+
+    // Reminder: hutang/piutang minggu ini
+    const startOfWeekDate = new Date(startOfWeek).setHours(0, 0, 0, 0);
+    const endOfWeekDate = new Date(endOfWeek).setHours(23, 59, 59, 999);
+
+    // Ambil hutang/piutang dalam rentang minggu ini
+    const debtsThisWeek = await Debt.find({
+      userId,
+      dueDate: { $gte: startOfWeekDate, $lte: endOfWeekDate },
+      status: "Belum Lunas",
+    });
+
+    if (debtsThisWeek.length > 0) {
+      reminders.push(
+        `${debtsThisWeek.length} hutang/piutang jatuh tempo minggu ini dan belum dibayar`
+      );
+    }
+
     res.status(200).json({
       status: "Success",
       summary: { totalIncome, totalExpense, balance },
       transactionStats: { mostFrequentCategory },
       chartData,
       availableYears,
+      topMenus,
+      reminders,
+      lowStocks,
     });
   } catch (err) {
     res.status(500).json({

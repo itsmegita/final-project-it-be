@@ -170,14 +170,20 @@ const getTransactions = async (req, res) => {
       filter.date = { $gte: start, $lte: end };
     }
 
+    // Total income untuk semua transaksi yang terfilter
+    const totalIncomeResult = await Transaction.aggregate([
+      { $match: filter },
+      { $group: { _id: null, totalIncome: { $sum: "$amount" } } }
+    ]);
+    const totalIncome = totalIncomeResult[0]?.totalIncome || 0;
+
+    // Mengambil transaksi dengan pagination
     const totalCount = await Transaction.countDocuments(filter);
     const transactions = await Transaction.find(filter)
       .sort({ date: -1, _id: -1 })
       .skip((pageNum - 1) * limitNum)
       .limit(limitNum)
       .populate("orderItems.menuItem");
-
-    const totalIncome = transactions.reduce((sum, trx) => sum + trx.amount, 0);
 
     return res.status(200).json({
       status: "Success",
