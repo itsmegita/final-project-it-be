@@ -165,7 +165,7 @@ OmzetDapur`;
 // Register
 const register = async (req, res, next) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, storeAddress, phoneNumber } = req.body;
 
     // cek apakah email sudah terdaftar
     if (await User.findOne({ email })) {
@@ -180,6 +180,8 @@ const register = async (req, res, next) => {
       name,
       email,
       password: hashedPassword,
+      storeAddress,
+      phoneNumber,
     });
 
     // kirim email verifikasi untuk otp
@@ -629,47 +631,6 @@ const resetPassword = async (req, res) => {
   }
 };
 
-// Request otp untuk update email
-// const requestEmailUpdateOTP = async (req, res, next) => {
-//   try {
-//     const { newEmail } = req.body;
-//     const userId = req.user.id;
-
-//     // cek apakah email baru sudah digunakan oleh user lain
-//     if (await User.findOne({ email: newEmail })) {
-//       return res.status(400).json({
-//         status: "Error",
-//         message: "Email sudah terdaftar",
-//       });
-//     }
-
-//     // generate OTP
-//     const otp = crypto.randomInt(100000, 999999).toString();
-//     const otpExpires = Date.now() + 5 * 60 * 1000;
-
-//     // simpan OTP dan email baru sementara di database
-//     await User.findByIdAndUpdate(userId, {
-//       newEmail,
-//       emailOTP: otp,
-//       emailOTPExpires: otpExpires,
-//     });
-
-//     await sendOTP(user, "verifikasi");
-
-//     res.status(200).json({
-//       status: "Success",
-//       message: "OTP telah dikirimkan ke email yang baru",
-//     });
-//   } catch (err) {
-//     console.error(err);
-
-//     res.status(500).json({
-//       status: "Error",
-//       message: "Terjadi kesalahan pada server",
-//       error: err.message,
-//     });
-//   }
-// };
 
 module.exports = {
   register,

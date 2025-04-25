@@ -31,7 +31,7 @@ const getUserProfile = async (req, res) => {
 // update user profile
 const updateUserProfile = async (req, res) => {
   try {
-    const { name } = req.body;
+    const { name, storeAddress, phoneNumber } = req.body;
     const user = await User.findById(req.user.id);
 
     if (!user) {
@@ -41,7 +41,7 @@ const updateUserProfile = async (req, res) => {
       });
     }
 
-    // update & update nama jika ada
+    // update nama jika ada
     if (name) {
       if (name.length < 3 || name.length > 50) {
         return res.status(400).json({
@@ -52,6 +52,23 @@ const updateUserProfile = async (req, res) => {
       user.name = name;
     }
 
+    // update alamat jika ada
+    if (storeAddress) {
+      user.storeAddress = storeAddress;
+    }
+
+    // update nomor telepon jika ada
+    if (phoneNumber) {
+      const phoneRegex = /^\+?[0-9]{10,15}$/;
+      if (!phoneRegex.test(phoneNumber)) {
+        return res.status(400).json({
+          status: "Error",
+          message: "Nomor telepon tidak valid",
+        });
+      }
+      user.phoneNumber = phoneNumber;
+    }
+
     await user.save();
     res.status(200).json({
       status: "Success",
@@ -60,6 +77,8 @@ const updateUserProfile = async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
+        storeAddress: user.storeAddress,
+        phoneNumber: user.phoneNumber,
         isVerified: user.isVerified,
       },
     });
