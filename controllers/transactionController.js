@@ -162,7 +162,7 @@ const getTransactions = async (req, res) => {
       });
     }
 
-    const filter = {};
+    const filter = { userId: req.user.id };
     if (month && year) {
       const start = new Date(Number(year), Number(month) - 1, 1);
       const end = new Date(Number(year), Number(month), 0);
@@ -173,7 +173,7 @@ const getTransactions = async (req, res) => {
     // Total income untuk semua transaksi yang terfilter
     const totalIncomeResult = await Transaction.aggregate([
       { $match: filter },
-      { $group: { _id: null, totalIncome: { $sum: "$amount" } } }
+      { $group: { _id: null, totalIncome: { $sum: "$amount" } } },
     ]);
     const totalIncome = totalIncomeResult[0]?.totalIncome || 0;
 
