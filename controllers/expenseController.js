@@ -1,30 +1,25 @@
 const Expense = require("../models/Expense");
+const FoodProduct = require("../models/FoodProduct");
 const { createNotification } = require("../utils/notificationHelper");
 const mongoose = require("mongoose");
 
-// buat expense baru
+// buat pengeluaran baru
 const createExpense = async (req, res) => {
   try {
-    const { category, amount, description, date, paymentMethod, items } =
-      req.body;
+    const { category, description, date, paymentMethod, items } = req.body;
     const userId = req.user.id;
 
-    if (!category || !amount || !paymentMethod) {
+    if (!category || !paymentMethod) {
       return res.status(400).json({
         status: "Error",
-        message: "Kategori, jumlah, dan metode pembayaran harus diisi",
+        message: "Kategori dan metode pembayaran harus diisi",
       });
     }
 
-    if (typeof amount !== "number" || amount <= 0) {
-      return res.status(400).json({
-        status: "Error",
-        message: "Jumlah pengeluaran harus berupa angka positif",
-      });
-    }
+    let amount = req.body.amount;
+    let newItems = items || [];
 
-    // Validasi item jika kategori adalah Pembelian Bahan Baku
-    if (category === "Pembelian Bahan Baku") {
+    if (category === "Bahan Baku") {
       if (!Array.isArray(items) || items.length === 0) {
         return res.status(400).json({
           status: "Error",
@@ -37,16 +32,37 @@ const createExpense = async (req, res) => {
           !item.foodProductId ||
           typeof item.quantity !== "number" ||
           item.quantity <= 0 ||
-          !item.unit ||
           typeof item.price !== "number" ||
           item.price <= 0
         ) {
           return res.status(400).json({
             status: "Error",
             message:
-              "Semua item harus memiliki foodProductId, quantity (>0), unit, dan price (>0)",
+              "Semua item harus memiliki foodProductId, quantity (>0), dan price (>0)",
           });
         }
+      }
+
+      // Hitung total amount berdasarkan item
+      amount = 0;
+      newItems = items.map((item) => {
+        const total = item.quantity * item.price;
+        amount += total;
+
+        return {
+          foodProductId: item.foodProductId,
+          quantity: item.quantity,
+          unit: item.unit,
+          price: item.price,
+        };
+      });
+    } else {
+      // Jika bukan kategori Bahan Baku, amount harus diisi manual
+      if (typeof amount !== "number" || amount <= 0) {
+        return res.status(400).json({
+          status: "Error",
+          message: "Jumlah pengeluaran harus berupa angka positif",
+        });
       }
     }
 
@@ -57,12 +73,23 @@ const createExpense = async (req, res) => {
       description,
       date: date || new Date(),
       paymentMethod,
-      items: category === "Pembelian Bahan Baku" ? items : [],
+      items: category === "Bahan Baku" ? newItems : [],
     });
 
     await expense.save();
 
-    // notifikasi
+    // Update stok jika kategori Bahan Baku
+    if (category === "Bahan Baku" && newItems.length > 0) {
+      for (const item of newItems) {
+        await FoodProduct.findByIdAndUpdate(
+          item.foodProductId,
+          { $inc: { stock: item.quantity } },
+          { new: true }
+        );
+      }
+    }
+
+    // Buat notifikasi
     await createNotification(
       userId,
       "Pengeluaran Baru",
@@ -83,7 +110,7 @@ const createExpense = async (req, res) => {
   }
 };
 
-// get semua pengeluaran dengan filter berdasarkan category, bulan dan tahun, serta pagination
+// get semua pengeluaran
 const getExpenses = async (req, res) => {
   try {
     const { category, month, year, sort, page = 1, limit = 10 } = req.query;
@@ -197,85 +224,138 @@ const getExpense = async (req, res) => {
 // update pengeluaran
 const updateExpense = async (req, res) => {
   try {
-    const { category, amount, description, date, paymentMethod, items } =
+    const { category, description, date, paymentMethod, items, amount } =
       req.body;
-    const updateFields = {};
+    const userId = req.user.id;
 
-    if (category) updateFields.category = category;
-    if (amount !== undefined) {
-      if (typeof amount !== "number" || amount <= 0) {
-        return res.status(400).json({
-          status: "Error",
-          message: "Jumlah pengeluaran harus berupa angka positif",
-        });
-      }
-      updateFields.amount = amount;
-    }
-    if (description) updateFields.description = description;
-    if (date) updateFields.date = date;
-    if (paymentMethod) updateFields.paymentMethod = paymentMethod;
-
-    if (category === "Pembelian Bahan Baku") {
-      if (!Array.isArray(items) || items.length === 0) {
-        return res.status(400).json({
-          status: "Error",
-          message: "Detail pembelian bahan baku (items) wajib diisi",
-        });
-      }
-
-      for (const item of items) {
-        if (
-          !item.foodProductId ||
-          typeof item.quantity !== "number" ||
-          item.quantity <= 0 ||
-          !item.unit ||
-          typeof item.price !== "number" ||
-          item.price <= 0
-        ) {
-          return res.status(400).json({
-            status: "Error",
-            message:
-              "Semua item harus memiliki foodProductId, quantity (>0), unit, dan price (>0)",
-          });
-        }
-      }
-
-      updateFields.items = items;
-    } else {
-      updateFields.items = [];
-    }
-
-    if (Object.keys(updateFields).length === 0) {
-      return res.status(400).json({
-        status: "Error",
-        message: "Tidak ada data yang diperbarui",
-      });
-    }
-
-    const expense = await Expense.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user.id },
-      updateFields,
-      { new: true }
-    );
-
-    if (!expense) {
+    const oldExpense = await Expense.findOne({ _id: req.params.id, userId });
+    if (!oldExpense) {
       return res.status(404).json({
         status: "Error",
         message: "Pengeluaran tidak ditemukan",
       });
     }
 
-    // notifikasi
+    let newCategory = category || oldExpense.category;
+    let newDescription =
+      description !== undefined ? description : oldExpense.description;
+    let newDate = date ? new Date(date) : oldExpense.date;
+    let newPaymentMethod = paymentMethod || oldExpense.paymentMethod;
+    let newAmount = oldExpense.amount;
+    let newItems = [...oldExpense.items]; // Copy items lama
+
+    if (newCategory === "Bahan Baku") {
+      if (items) {
+        if (!Array.isArray(items)) {
+          return res.status(400).json({
+            status: "Error",
+            message: "Items harus berupa array.",
+          });
+        }
+
+        // Rollback stok bahan baku dari old items
+        for (const oldItem of oldExpense.items) {
+          await FoodProduct.findByIdAndUpdate(
+            oldItem.foodProductId,
+            { $inc: { stock: -oldItem.quantity } },
+            { new: true }
+          );
+        }
+
+        // Update atau tambah item satu per satu
+        const updatedItems = [];
+
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          const oldItem = oldExpense.items[i]; // Ambil dari posisi lama jika ada
+
+          const foodProductId =
+            item.foodProductId || (oldItem ? oldItem.foodProductId : null);
+          if (!foodProductId) {
+            return res.status(400).json({
+              status: "Error",
+              message: `Item ke-${i + 1} tidak punya foodProductId.`,
+            });
+          }
+
+          const quantity =
+            item.quantity !== undefined ? item.quantity : oldItem?.quantity;
+          const price = item.price !== undefined ? item.price : oldItem?.price;
+          const unit = item.unit !== undefined ? item.unit : oldItem?.unit;
+
+          if (
+            typeof quantity !== "number" ||
+            quantity <= 0 ||
+            typeof price !== "number" ||
+            price <= 0 ||
+            typeof unit !== "string"
+          ) {
+            return res.status(400).json({
+              status: "Error",
+              message: `Item ke-${
+                i + 1
+              } harus punya quantity (>0), price (>0), dan unit (string).`,
+            });
+          }
+
+          updatedItems.push({
+            foodProductId,
+            quantity,
+            price,
+            unit,
+            total: quantity * price,
+          });
+        }
+
+        newItems = updatedItems;
+        newAmount = newItems.reduce((acc, item) => acc + item.total, 0);
+
+        // Update stok bahan baku berdasarkan newItems
+        for (const item of newItems) {
+          await FoodProduct.findByIdAndUpdate(
+            item.foodProductId,
+            { $inc: { stock: item.quantity } },
+            { new: true }
+          );
+        }
+      }
+    } else {
+      // Kalau bukan kategori Bahan Baku
+      newItems = [];
+      if (amount !== undefined) {
+        if (typeof amount !== "number" || amount <= 0) {
+          return res.status(400).json({
+            status: "Error",
+            message: "Jumlah pengeluaran harus berupa angka positif",
+          });
+        }
+        newAmount = amount;
+      }
+    }
+
+    const updatedExpense = await Expense.findOneAndUpdate(
+      { _id: req.params.id, userId },
+      {
+        category: newCategory,
+        description: newDescription,
+        date: newDate,
+        paymentMethod: newPaymentMethod,
+        amount: newAmount,
+        items: newItems,
+      },
+      { new: true }
+    );
+
     await createNotification(
-      req.user.id,
+      userId,
       "Pengeluaran Diperbarui",
-      `Pengeluaran pada tanggal ${date} sebesar Rp${expense.amount} pada kategori ${category} telah diperbarui`
+      `Pengeluaran sebesar Rp${newAmount} dengan kategori ${newCategory} telah diperbarui`
     );
 
     res.status(200).json({
       status: "Success",
       message: "Pengeluaran berhasil diperbarui",
-      expense,
+      expense: updatedExpense,
     });
   } catch (err) {
     res.status(500).json({
@@ -289,9 +369,11 @@ const updateExpense = async (req, res) => {
 // hapus pengeluaran
 const deleteExpense = async (req, res) => {
   try {
-    const expense = await Expense.findOneAndDelete({
+    const userId = req.user.id;
+
+    const expense = await Expense.findOne({
       _id: req.params.id,
-      userId: req.user.id,
+      userId,
     });
 
     if (!expense) {
@@ -301,12 +383,25 @@ const deleteExpense = async (req, res) => {
       });
     }
 
+    // Kalau kategori Bahan Baku, kembalikan stok dulu
+    if (expense.category === "Bahan Baku" && expense.items.length > 0) {
+      for (const item of expense.items) {
+        await FoodProduct.findByIdAndUpdate(
+          item.foodProductId,
+          { $inc: { stock: -item.quantity } },
+          { new: true }
+        );
+      }
+    }
+
+    // Hapus pengeluaran setelah stok dikembalikan
+    await Expense.deleteOne({ _id: expense._id });
+
     const expenseDate = expense.date.toISOString().split("T")[0];
     const expenseAmount = expense.amount;
     const expenseCategory = expense.category;
-    const userId = req.user.id;
 
-    // notifikasi
+    // Notifikasi
     await createNotification(
       userId,
       "Pengeluaran Dihapus",

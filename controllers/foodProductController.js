@@ -5,7 +5,7 @@ const { createNotification } = require("../utils/notificationHelper");
 // tambah bahan baku baru
 const createFoodProduct = async (req, res) => {
   try {
-    const { name, unit, stock, pricePerUnit } = req.body;
+    const { name, unit, stock } = req.body;
 
     // validasi input
     if (!name || name.length < 3 || name.length > 100) {
@@ -26,12 +26,6 @@ const createFoodProduct = async (req, res) => {
         message: "Stock harus berupa angka dan tidak boleh negatif",
       });
     }
-    if (pricePerUnit === undefined || isNaN(pricePerUnit) || pricePerUnit < 0) {
-      return res.status(400).json({
-        status: "Error",
-        message: "Harga per unit harus berupa angka dan tidak boleh negatif",
-      });
-    }
 
     // cek apakah nama bahan baku sudah ada
     const existingFoodProduct = await FoodProduct.findOne({ name });
@@ -48,7 +42,6 @@ const createFoodProduct = async (req, res) => {
       name,
       unit,
       stock,
-      pricePerUnit,
     });
     await newFoodproduct.save();
 
@@ -137,7 +130,7 @@ const getFoodProduct = async (req, res) => {
 const updateFoodProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, unit, stock, pricePerUnit } = req.body;
+    const { name, unit, stock } = req.body;
 
     // validasi id
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -178,22 +171,11 @@ const updateFoodProduct = async (req, res) => {
         message: "Stock harus berupa angka dan tidak boleh negatif",
       });
     }
-    if (
-      pricePerUnit !== undefined &&
-      (isNaN(pricePerUnit) || pricePerUnit < 0)
-    ) {
-      return res.status(400).json({
-        status: "Error",
-        message: "Harga per unit harus berupa angka dan tidak boleh negatif",
-      });
-    }
 
     // update data
     foodProduct.name = name || foodProduct.name;
     foodProduct.unit = unit || foodProduct.unit;
     foodProduct.stock = stock !== undefined ? stock : foodProduct.stock;
-    foodProduct.pricePerUnit =
-      pricePerUnit !== undefined ? pricePerUnit : foodProduct.pricePerUnit;
 
     await foodProduct.save();
 
