@@ -8,17 +8,17 @@ const sendEmail = require("../config/emailConfig");
 const sendOTP = async (user, type = "verifikasi") => {
   const otp = crypto.randomInt(100000, 999999).toString();
   user.otp = otp;
-  user.otpExpires = Date.now() + 30 * 1000;
+  user.otpExpires = Date.now() + 3 * 60 * 1000;
   await user.save();
 
   const subject = "[No Reply] - Kode OTP Verifikasi";
-  const textContent = `Dear ${User.name},
+  const textContent = `Dear ${user.name},
 
 Terima kasih telah mendaftar di OmzetDapur. Untuk mengaktifkan akun anda, silahkan gunakan One-Time Password (OTP) berikut:
 
 Kode OTP: ${otp}
 
-Kode OTP ini berlaku selama 1 menit. Jika kode OTP kadaluarsa, anda bisa request OTP baru melalui halaman aktivasi.
+Kode OTP ini berlaku selama 3 menit. Jika kode OTP kadaluarsa, anda bisa request OTP baru melalui halaman aktivasi.
 
 Terima kasih atas perhatiannya
 
@@ -83,7 +83,7 @@ OmzetDapur`;
                     color: #333333;
                   "
                 >
-                  Dear ${User.name},
+                  Dear ${user.name},
                 </p>
                 <p
                   style="
@@ -121,7 +121,7 @@ OmzetDapur`;
                     color: #333333;
                   "
                 >
-                  Kode OTP ini berlaku selama 1 menit. Jika kode OTP kadaluarsa,
+                  Kode OTP ini berlaku selama 3 menit. Jika kode OTP kadaluarsa,
                   anda bisa request OTP baru melalui halaman aktivasi
                   <br />
                   Terima kasih atas perhatiannya
@@ -167,9 +167,40 @@ const register = async (req, res, next) => {
   try {
     const { name, email, password, storeAddress, phoneNumber } = req.body;
 
+    // Validasi nama (tidak boleh kosong)
+    if (!name || name.trim().length === 0) {
+      return res.status(400).json({ message: "Nama tidak boleh kosong" });
+    }
+
+    // Validasi email (cek format email menggunakan regex)
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!email || !emailRegex.test(email)) {
+      return res.status(400).json({ message: "Format email tidak valid" });
+    }
+
     // cek apakah email sudah terdaftar
     if (await User.findOne({ email })) {
       return res.status(400).json({ message: "Email sudah terdaftar" });
+    }
+
+    // Validasi password (minimal 6 karakter)
+    if (!password || password.length < 6) {
+      return res
+        .status(400)
+        .json({ message: "Password harus memiliki minimal 6 karakter" });
+    }
+
+    // Validasi nomor telepon (hanya angka dan panjangnya sesuai)
+    const phoneRegex = /^\d{10,15}$/;
+    if (!phoneNumber || !phoneRegex.test(phoneNumber)) {
+      return res.status(400).json({ message: "Nomor telepon tidak valid" });
+    }
+
+    // Validasi alamat toko (tidak boleh kosong)
+    if (!storeAddress || storeAddress.trim().length === 0) {
+      return res
+        .status(400)
+        .json({ message: "Alamat toko tidak boleh kosong" });
     }
 
     // hash password
@@ -218,7 +249,7 @@ const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // cek apakah user ada di database
+    // cek apakah user ada
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(401).json({
@@ -227,7 +258,7 @@ const login = async (req, res) => {
       });
     }
 
-    // cek apakah password cocok
+    // cek password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return res.status(401).json({
@@ -236,12 +267,16 @@ const login = async (req, res) => {
       });
     }
 
-    // Cek apakah akun sudah diverifikasi
+    // Kalau belum diverifikasi
     if (!user.isVerified) {
-      return res.status(403).json({
-        status: "Error",
-        message:
-          "Akun belum diverifikasi. Silakan cek email untuk verifikasi OTP.",
+      // Generate OTP dan kirim ke email
+      await sendOTP(user, "verifikasi");
+
+      return res.status(200).json({
+        status: "Success",
+        message: "Akun belum diverifikasi. OTP baru telah dikirim ke email.",
+        isVerified: false,
+        email: user.email,
       });
     }
 
@@ -254,6 +289,7 @@ const login = async (req, res) => {
       status: "Success",
       message: "Login berhasil",
       token,
+      isVerified: true,
       user: {
         id: user._id,
         name: user.name,
@@ -395,7 +431,7 @@ const forgotPassword = async (req, res) => {
     await sendEmail(
       email,
       "[No Reply] - Reset Password",
-      `Dear ${User.name},
+      `Dear ${user.name},
 
         Kami menerima permintaan untuk mereset password akun Anda. Silahkan klik tombol di bawah ini untuk mereset password anda
         
@@ -468,7 +504,7 @@ const forgotPassword = async (req, res) => {
                     color: #333333;
                   "
                 >
-                  Dear ${User.name},
+                  Dear ${user.name},
                 </p>
                 <p
                   style="
@@ -630,7 +666,6 @@ const resetPassword = async (req, res) => {
     });
   }
 };
-
 
 module.exports = {
   register,
