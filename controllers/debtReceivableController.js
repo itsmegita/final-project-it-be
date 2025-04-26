@@ -64,49 +64,91 @@ const createDebt = async (req, res) => {
 // get semua hutang/piutang
 const getAllDebtss = async (req, res) => {
   try {
-    const { type, status, startDate, endDate, sort } = req.query;
-    let filter = { userId: req.user.id };
+    const {
+      type,
+      status,
+      month,
+      year,
+      sort,
+      page = 1,
+      limit = 10,
+      search = "",
+    } = req.query;
+
+    const filter = { userId: req.user.id };
 
     // filter berdasarkan jenis
-    if (type) {
+    if (type && type.trim() !== "") {
       filter.type = type;
     }
 
-    // filter berdasarkan status lunas/belum lunas
-    if (status) {
+    // filter berdasarkan status
+    if (status && status.trim() !== "") {
       filter.status = status;
     }
 
-    // filter berdasarkan rentang tanggal
-    if (startDate && endDate) {
-      filter.dueDate = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate),
-      };
-    } else if (startDate) {
-      filter.dueDate = { $gte: new Date(startDate) };
-    } else if (endDate) {
-      filter.dueDate = { $lte: new Date(endDate) };
+    // filter berdasarkan bulan dan tahun
+    if (month && year) {
+      const monthInt = parseInt(month);
+      const yearInt = parseInt(year);
+
+      if (
+        !isNaN(monthInt) &&
+        !isNaN(yearInt) &&
+        monthInt >= 1 &&
+        monthInt <= 12
+      ) {
+        const startDate = new Date(yearInt, monthInt - 1, 1);
+        const endDate = new Date(yearInt, monthInt, 0, 23, 59, 59, 999);
+
+        filter.dueDate = {
+          $gte: startDate,
+          $lte: endDate,
+        };
+      }
+    }
+
+    // filter berdasarkan search
+    if (search && search.trim() !== "") {
+      filter.customerName = { $regex: search, $options: "i" };
     }
 
     // sorting
-    let sortOption = {};
+    const sortOption = {};
     if (sort) {
       if (sort === "date_asc") sortOption.dueDate = 1;
-      if (sort === "date_desc") sortOption.dueDate = -1;
-      if (sort === "amount_asc") sortOption.amount = 1;
-      if (sort === "amount_desc") sortOption.amount = -1;
+      else if (sort === "date_desc") sortOption.dueDate = -1;
+      else if (sort === "amount_asc") sortOption.amount = 1;
+      else if (sort === "amount_desc") sortOption.amount = -1;
+      else sortOption.dueDate = 1;
     } else {
       sortOption.dueDate = 1;
     }
 
-    // ambil data dari database
-    const data = await Debt.find(filter).sort(sortOption).lean();
+    // pagination
+    const currentPage = parseInt(page) || 1;
+    const perPage = parseInt(limit) || 10;
+    const skip = (currentPage - 1) * perPage;
+
+    const totalData = await Debt.countDocuments(filter);
+    const totalPages = Math.ceil(totalData / perPage);
+
+    const data = await Debt.find(filter)
+      .sort(sortOption)
+      .skip(skip)
+      .limit(perPage)
+      .lean();
 
     res.status(200).json({
       status: "Success",
       message: "Berhasil mengambil data hutang/piutang",
       data,
+      pagination: {
+        totalData,
+        totalPages,
+        currentPage,
+        perPage,
+      },
     });
   } catch (err) {
     res.status(500).json({
