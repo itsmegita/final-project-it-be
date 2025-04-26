@@ -162,24 +162,27 @@ const getTransactions = async (req, res) => {
       });
     }
 
-    const filter = { userId: req.user.id };
+    const matchStage = { userId: new mongoose.Types.ObjectId(req.user.id) };
+
     if (month && year) {
       const start = new Date(Number(year), Number(month) - 1, 1);
       const end = new Date(Number(year), Number(month), 0);
       end.setHours(23, 59, 59, 999);
-      filter.date = { $gte: start, $lte: end };
+      matchStage.date = { $gte: start, $lte: end };
     }
 
-    // Total income untuk semua transaksi yang terfilter
+    // Hitung totalIncome
     const totalIncomeResult = await Transaction.aggregate([
-      { $match: filter },
+      { $match: matchStage },
       { $group: { _id: null, totalIncome: { $sum: "$amount" } } },
     ]);
     const totalIncome = totalIncomeResult[0]?.totalIncome || 0;
 
-    // Mengambil transaksi dengan pagination
-    const totalCount = await Transaction.countDocuments(filter);
-    const transactions = await Transaction.find(filter)
+    // Hitung total transaksi
+    const totalCount = await Transaction.countDocuments(matchStage);
+
+    // Ambil transaksi paginated
+    const transactions = await Transaction.find(matchStage)
       .sort({ date: -1, _id: -1 })
       .skip((pageNum - 1) * limitNum)
       .limit(limitNum)
