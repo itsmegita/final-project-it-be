@@ -14,10 +14,10 @@ const createFoodProduct = async (req, res) => {
         message: "Nama harus antara 3 - 100 karakter",
       });
     }
-    if (!unit || !["gram", "kg", "ml", "liter", "pcs"].includes(unit)) {
+    if (!unit || !["gram", "kg", "ml", "liter", "pcs", "ekor"].includes(unit)) {
       return res.status(400).json({
         status: "Error",
-        message: "Unit harus berupa gram, kg, ml, liter, atau pcs",
+        message: "Unit harus berupa gram, kg, ml, liter, pcs, atau ekor",
       });
     }
     if (stock === undefined || isNaN(stock) || stock < 0) {
@@ -159,10 +159,10 @@ const updateFoodProduct = async (req, res) => {
         message: "Nama harus antara 3 - 100 karakter",
       });
     }
-    if (unit && !["gram", "kg", "ml", "liter", "pcs"].includes(unit)) {
+    if (unit && !["gram", "kg", "ml", "liter", "pcs", "ekor"].includes(unit)) {
       return res.status(400).json({
         status: "Error",
-        message: "Unit harus: gram, kg, ml, liter, atau pcs",
+        message: "Unit harus: gram, kg, ml, liter, pcs, atau ekor",
       });
     }
     if (stock !== undefined && (isNaN(stock) || stock < 0)) {

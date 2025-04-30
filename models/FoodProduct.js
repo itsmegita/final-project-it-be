@@ -11,7 +11,7 @@ const foodProductSchema = new mongoose.Schema(
     unit: {
       type: String,
       required: true,
-      enum: ["gram", "kg", "ml", "liter", "pcs"],
+      enum: ["gram", "kg", "ml", "liter", "pcs", "ekor"],
     },
     stock: { type: Number, required: true, min: 0 },
   },
