@@ -68,9 +68,6 @@ const generateProfitLossReport = async (req, res) => {
     const sales = await Transaction.find({
       userId: req.user.id,
       date: { $gte: start, $lt: end },
-    }).populate({
-      path: "orderItems.menuItem",
-      populate: { path: "ingredients.foodProductId" },
     });
 
     const expenses = await Expense.find({
@@ -80,207 +77,183 @@ const generateProfitLossReport = async (req, res) => {
 
     const totalPendapatan = sales.reduce((sum, trx) => sum + trx.amount, 0);
 
-    let totalHPP = 0;
-    let totalBebanOperasional = 0;
+    // total beban operasional
+    const totalBebanOperasional = expenses.reduce(
+      (sum, exp) => sum + exp.amount,
+      0
+    );
 
-    for (const exp of expenses) {
-      if (exp.category === "Bahan Baku") {
-        totalHPP += exp.items.reduce((itemSum, item) => {
-          return itemSum + item.price * item.quantity;
-        }, 0);
-      } else {
-        totalBebanOperasional += exp.amount;
-      }
-    }
-
-    const labaKotor = totalPendapatan - totalHPP;
+    const labaKotor = totalPendapatan - totalBebanOperasional;
     const labaUsaha = labaKotor - totalBebanOperasional;
 
     const htmlContent = `
 <html>
 <head>
   <style>
-  @page {
-    size: A4;
-    margin: 50px 30px 80px 30px;
-  }
-
-  body {
-    font-family: 'Arial', sans-serif;
-    font-size: 12px;
-    color: #333;
-    counter-reset: page;
-    margin: 0;
-  }
-
-  header {
-    text-align: center;
-    margin: 30px 0 20px 0;
-  }
-
-  header h1 {
-    font-size: 22px;
-    color: #2c3e50;
-    margin-bottom: 5px;
-  }
-
-  header p {
-    font-size: 14px;
-    color: #666;
-  }
-
-  footer {
-    position: fixed;
-    bottom: 0px;
-    left: 30px;
-    right: 30px;
-    height: 40px;
-    font-size: 10px;
-    color: #555;
-    background: #fff;
-    border-top: 1px solid #ccc;
-    padding: 5px 15px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    box-shadow: 0 -1px 2px rgba(0,0,0,0.05);
-  }
-
-  .pageNumber::after {
-    counter-increment: page;
-    content: "Halaman " counter(page);
-  }
-
-  main {
-    padding: 0 30px;
-    padding-bottom: 100px;
-    box-sizing: border-box;
-    min-height: 100%;
-  }
-
-  h2 {
-    font-size: 16px;
-    font-weight: bold;
-    color: #34495e;
-    border-bottom: 2px solid #ddd;
-    padding-bottom: 5px;
-    margin-top: 30px;
-  }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 10px;
-    margin-bottom: 30px;
-  }
-
-  th, td {
-    padding: 8px;
-    font-size: 12px;
-    border-bottom: 1px solid #ddd;
-    text-align: left;
-  }
-
-  th {
-    background-color: #3498db;
-    color: white;
-    font-weight: bold;
-  }
-
-  tfoot td {
-    font-weight: bold;
-    background-color: #ecf0f1;
-  }
-
-  .total-row td {
-    background-color: #f5f5f5;
-    font-weight: bold;
-  }
-
-  thead th:last-child,
-  tbody td:last-child,
-  tfoot td:last-child {
-    text-align: right;
-  }
-</style>
+    @page {
+      size: A4;
+      margin: 50px 30px 80px 30px;
+    }
+    body {
+      font-family: 'Arial', sans-serif;
+      font-size: 12px;
+      color: #333;
+      counter-reset: page;
+      margin: 0;
+    }
+    header {
+      text-align: center;
+      margin: 30px 0 20px 0;
+    }
+    header h1 {
+      font-size: 22px;
+      color: #2c3e50;
+      margin-bottom: 5px;
+    }
+    header p {
+      font-size: 14px;
+      color: #666;
+    }
+    footer {
+      position: fixed;
+      bottom: 0px;
+      left: 30px;
+      right: 30px;
+      height: 40px;
+      font-size: 10px;
+      color: #555;
+      background: #fff;
+      border-top: 1px solid #ccc;
+      padding: 5px 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 -1px 2px rgba(0,0,0,0.05);
+    }
+    .pageNumber::after {
+      counter-increment: page;
+      content: "Halaman " counter(page);
+    }
+    main {
+      padding: 0 30px;
+      padding-bottom: 100px;
+      box-sizing: border-box;
+      min-height: 100%;
+    }
+    h2 {
+      font-size: 16px;
+      font-weight: bold;
+      color: #34495e;
+      border-bottom: 2px solid #ddd;
+      padding-bottom: 5px;
+      margin-top: 30px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      margin-bottom: 30px;
+    }
+    th, td {
+      padding: 8px;
+      font-size: 12px;
+      border-bottom: 1px solid #ddd;
+      text-align: left;
+    }
+    th {
+      background-color: #3498db;
+      color: white;
+      font-weight: bold;
+    }
+    tfoot td {
+      font-weight: bold;
+      background-color: #ecf0f1;
+    }
+    .total-row td {
+      background-color: #f5f5f5;
+      font-weight: bold;
+    }
+    thead th:last-child,
+    tbody td:last-child,
+    tfoot td:last-child {
+      text-align: right;
+    }
+  </style>
 </head>
 <body>
 
-  <header>
-    <h1>Laporan Laba Rugi</h1>
-    <p>Periode: ${formatDate(new Date(startDate))} - ${formatDate(
-      new Date(endDate)
-    )}</p>
-  </header>
+<header>
+  <h1>Laporan Laba Rugi</h1>
+  <p>Periode: ${formatDate(start)} - ${formatDate(new Date(endDate))}</p>
+</header>
 
-  <footer>
-    <div>UMKM Kotamobagu Timur</div>
-    <div>${new Date().toLocaleString("id-ID")}</div>
-    <div class="pageNumber"></div>
-  </footer>
+<footer>
+  <div>UMKM Kotamobagu Timur</div>
+  <div>${new Date().toLocaleString("id-ID")}</div>
+  <div class="pageNumber"></div>
+</footer>
 
-  <main>
-    <h2>Ringkasan Keuangan</h2>
-    <table>
-      <tr><td><strong>Total Pendapatan</strong></td><td>: Rp ${totalPendapatan.toLocaleString()}</td></tr>
-      <tr><td><strong>Total HPP</strong></td><td>: Rp ${totalHPP.toLocaleString()}</td></tr>
-      <tr><td><strong>Laba Kotor</strong></td><td>: Rp ${labaKotor.toLocaleString()}</td></tr>
-      <tr><td><strong>Beban Operasional</strong></td><td>: Rp ${totalBebanOperasional.toLocaleString()}</td></tr>
-      <tr><td><strong>Laba Usaha (Bersih)</strong></td><td>: Rp ${labaUsaha.toLocaleString()}</td></tr>
-    </table>
+<main>
+  <h2>Ringkasan Keuangan</h2>
+  <table>
+    <tr><td><strong>Total Pendapatan</strong></td><td>: Rp ${totalPendapatan.toLocaleString()}</td></tr>
+    <tr><td><strong>Laba Kotor</strong></td><td>: Rp ${labaKotor.toLocaleString()}</td></tr>
+    <tr><td><strong>Beban Operasional</strong></td><td>: Rp ${totalBebanOperasional.toLocaleString()}</td></tr>
+    <tr><td><strong>Laba Usaha (Bersih)</strong></td><td>: Rp ${labaUsaha.toLocaleString()}</td></tr>
+  </table>
 
-    <h2>Detail Pendapatan</h2>
-    <table>
-      <thead>
-        <tr><th>Tanggal</th><th>Pelanggan</th><th>Total</th></tr>
-      </thead>
-      <tbody>
-        ${sales
-          .map(
-            (trx) => `
-          <tr>
-            <td>${formatDate(new Date(trx.date))}</td>
-            <td>${trx.customerName || "-"}</td>
-            <td>Rp ${trx.amount.toLocaleString()}</td>
-          </tr>
-        `
-          )
-          .join("")}
-      </tbody>
-      <tfoot>
-        <tr class="total-row">
-          <td colspan="2">Total Pendapatan</td>
-          <td>Rp ${totalPendapatan.toLocaleString()}</td>
+  <h2>Detail Pendapatan</h2>
+  <table>
+    <thead>
+      <tr><th>Tanggal</th><th>Pelanggan</th><th>Total</th></tr>
+    </thead>
+    <tbody>
+      ${sales
+        .map(
+          (trx) => `
+        <tr>
+          <td>${formatDate(new Date(trx.date))}</td>
+          <td>${trx.customerName || "-"}</td>
+          <td>Rp ${trx.amount.toLocaleString()}</td>
         </tr>
-      </tfoot>
-    </table>
+      `
+        )
+        .join("")}
+    </tbody>
+    <tfoot>
+      <tr class="total-row">
+        <td colspan="2">Total Pendapatan</td>
+        <td>Rp ${totalPendapatan.toLocaleString()}</td>
+      </tr>
+    </tfoot>
+  </table>
 
-    <h2>Detail Beban Operasional</h2>
-    <table>
-      <thead>
-        <tr><th>Tanggal</th><th>Kategori</th><th>Total</th></tr>
-      </thead>
-      <tbody>
-        ${expenses
-          .map(
-            (exp) => `
-          <tr>
-            <td>${formatDate(new Date(exp.date))}</td>
-            <td>${exp.category || "-"}</td>
-            <td>Rp ${exp.amount.toLocaleString()}</td>
-          </tr>
-        `
-          )
-          .join("")}
-      </tbody>
-      <tfoot>
-        <tr class="total-row">
-          <td colspan="2">Total Beban Operasional</td>
-          <td>Rp ${totalBebanOperasional.toLocaleString()}</td>
+  <h2>Detail Beban Operasional</h2>
+  <table>
+    <thead>
+      <tr><th>Tanggal</th><th>Kategori</th><th>Total</th></tr>
+    </thead>
+    <tbody>
+      ${expenses
+        .map(
+          (exp) => `
+        <tr>
+          <td>${formatDate(new Date(exp.date))}</td>
+          <td>${exp.category || "-"}</td>
+          <td>Rp ${exp.amount.toLocaleString()}</td>
         </tr>
-      </tfoot>
-    </table>
-  </main>
+      `
+        )
+        .join("")}
+    </tbody>
+    <tfoot>
+      <tr class="total-row">
+        <td colspan="2">Total Beban Operasional</td>
+        <td>Rp ${totalBebanOperasional.toLocaleString()}</td>
+      </tr>
+    </tfoot>
+  </table>
+</main>
 
 </body>
 </html>
