@@ -31,4 +31,15 @@ const protect = async (req, res, next) => {
   }
 };
 
-module.exports = protect;
+const isAdmin = (req, res, next) => {
+  if (req.user && req.user.role === "admin") {
+    return next();
+  } else {
+    return res.status(403).json({
+      status: "Error",
+      message: "Akses hanya untuk admin",
+    });
+  }
+};
+
+module.exports = { protect, isAdmin };

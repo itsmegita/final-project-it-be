@@ -8,7 +8,7 @@ const {
   deleteTransaction,
 } = require("../controllers/transactionController");
 
-const protect = require("../middleware/authMiddleware");
+const { protect } = require("../middleware/authMiddleware");
 
 router.post("/", protect, createTransaction);
 router.get("/", protect, getTransactions);

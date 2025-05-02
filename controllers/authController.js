@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const ActivityLog = require("../models/ActivityLog");
 const sendEmail = require("../config/emailConfig");
 
 // helper untuk mengirim otp
@@ -285,9 +286,18 @@ const login = async (req, res) => {
       expiresIn: "7d",
     });
 
+    // simpan log aktivitas login
+    await ActivityLog.create({
+      user: user._id,
+      type: "login",
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"],
+    });
+
     res.status(200).json({
       status: "Success",
       message: "Login berhasil",
+      role: user.role,
       token,
       isVerified: true,
       user: {

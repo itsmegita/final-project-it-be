@@ -1,8 +1,8 @@
 const express = require("express");
 const router = express.Router();
-const { getDashboardData } = require("../controllers/dashboardController");
+const { createActivityLog } = require("../controllers/activityController");
 const { protect } = require("../middleware/authMiddleware");
 
-router.get("/", protect, getDashboardData);
+router.post("/", protect, createActivityLog);
 
 module.exports = router;

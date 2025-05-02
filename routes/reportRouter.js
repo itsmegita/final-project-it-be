@@ -6,7 +6,7 @@ const {
   generateFinancialPositionReport,
   generateDailyCashBookReport,
 } = require("../controllers/repotController");
-const protect = require("../middleware/authMiddleware");
+const { protect } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
