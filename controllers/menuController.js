@@ -10,10 +10,23 @@ const createMenu = async (req, res) => {
     const { name, category, price, ingredients } = req.body;
 
     // Validasi nama
-    if (!name || name.length < 3 || name.length > 100) {
+    const trimmedName = name?.trim();
+    if (!trimmedName || trimmedName.length < 3 || trimmedName.length > 100) {
       return res.status(400).json({
         status: "Error",
         message: "Nama menu harus antara 3-100 karakter",
+      });
+    }
+
+    // Cek duplikat nama menu (per user)
+    const existingMenu = await Menu.findOne({
+      userId: req.user.id,
+      name: trimmedName,
+    });
+    if (existingMenu) {
+      return res.status(400).json({
+        status: "Error",
+        message: "Nama menu sudah digunakan",
       });
     }
 
@@ -90,7 +103,7 @@ const createMenu = async (req, res) => {
     // Simpan menu
     const newMenu = new Menu({
       userId: req.user.id,
-      name,
+      name: trimmedName,
       category,
       price,
       ingredients: updatedIngredients,
