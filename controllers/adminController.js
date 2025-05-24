@@ -139,13 +139,15 @@ const getActivityLogs = async (req, res) => {
   try {
     const logs = await ActivityLog.find()
       .populate("user", "name email")
-      .sort({ timestamp: -1 });
+      .sort({ timestamp: -1 })
+      .select("user type timestamp ipAddress userAgent");
 
     res.json(logs);
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Gagal mengambil log aktivitas", error: error.message });
+    res.status(500).json({
+      message: "Gagal mengambil log aktivitas",
+      error: error.message,
+    });
   }
 };
 
