@@ -2,28 +2,29 @@ const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const ActivityLog = require("../models/ActivityLog");
 const sendEmail = require("../config/emailConfig");
 
 // helper untuk mengirim otp
 const sendOTP = async (user, type = "verifikasi") => {
   const otp = crypto.randomInt(100000, 999999).toString();
   user.otp = otp;
-  user.otpExpires = Date.now() + 30 * 1000;
+  user.otpExpires = Date.now() + 3 * 60 * 1000;
   await user.save();
 
   const subject = "[No Reply] - Kode OTP Verifikasi";
-  const textContent = `Dear ${User.name},
+  const textContent = `Dear ${user.name},
 
-Terima kasih telah mendaftar di Cura-Cents. Untuk mengaktifkan akun anda, silahkan gunakan One-Time Password (OTP) berikut:
+Terima kasih telah mendaftar di OmzetDapur. Untuk mengaktifkan akun anda, silahkan gunakan One-Time Password (OTP) berikut:
 
 Kode OTP: ${otp}
 
-Kode OTP ini berlaku selama 1 menit. Jika kode OTP kadaluarsa, anda bisa request OTP baru melalui halaman aktivasi.
+Kode OTP ini berlaku selama 3 menit. Jika kode OTP kadaluarsa, anda bisa request OTP baru melalui halaman aktivasi.
 
 Terima kasih atas perhatiannya
 
 Salam hangat,
-Cura Cents`;
+OmzetDapur`;
 
   const htmlContent = `<!DOCTYPE html>
 <html lang="en">
@@ -58,7 +59,7 @@ Cura Cents`;
           >
             <tr>
               <td style="text-align: center; padding: 20px 0">
-                <h1 style="margin: 0; color: #80b4d4">Cura-Cents</h1>
+                <h1 style="margin: 0; color: #80b4d4">OmzetDapur</h1>
               </td>
             </tr>
             <tr>
@@ -70,7 +71,7 @@ Cura Cents`;
                   color: #ffffff;
                 "
               >
-                <h1 style="margin: 0">Welcome to Cura-Cents!</h1>
+                <h1 style="margin: 0">Welcome to OmzetDapur!</h1>
               </td>
             </tr>
             <tr>
@@ -83,7 +84,7 @@ Cura Cents`;
                     color: #333333;
                   "
                 >
-                  Dear ${User.name},
+                  Dear ${user.name},
                 </p>
                 <p
                   style="
@@ -93,7 +94,7 @@ Cura Cents`;
                     color: #333333;
                   "
                 >
-                  Terima kasih telah mendaftar di Cura-Cents. Untuk mengaktifkan
+                  Terima kasih telah mendaftar di OmzetDapur. Untuk mengaktifkan
                   akun anda, silakan gunakan One-Time Password (OTP) berikut:
                 </p>
                 <p style="margin-top: 30px; text-align: center">
@@ -121,7 +122,7 @@ Cura Cents`;
                     color: #333333;
                   "
                 >
-                  Kode OTP ini berlaku selama 1 menit. Jika kode OTP kadaluarsa,
+                  Kode OTP ini berlaku selama 3 menit. Jika kode OTP kadaluarsa,
                   anda bisa request OTP baru melalui halaman aktivasi
                   <br />
                   Terima kasih atas perhatiannya
@@ -131,7 +132,7 @@ Cura Cents`;
                   <br />
                   <br />
                   <br />
-                  Cura-Cents
+                  OmzetDapur
                 </p>
               </td>
             </tr>
@@ -145,10 +146,10 @@ Cura Cents`;
                 "
               >
                 <p style="margin: 0; font-size: 12px">
-                  &copy; 2025 Cura-Cents. All rights reserved.
+                  &copy; 2025 OmzetDapur. All rights reserved.
                 </p>
                 <p style="margin: 10px 0 0 0; font-size: 12px">
-                  Cura-Cents Email System
+                  OmzetDapur Email System
                 </p>
               </td>
             </tr>
@@ -165,11 +166,42 @@ Cura Cents`;
 // Register
 const register = async (req, res, next) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, storeAddress, phoneNumber } = req.body;
+
+    // Validasi nama (tidak boleh kosong)
+    if (!name || name.trim().length === 0) {
+      return res.status(400).json({ message: "Nama tidak boleh kosong" });
+    }
+
+    // Validasi email (cek format email menggunakan regex)
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!email || !emailRegex.test(email)) {
+      return res.status(400).json({ message: "Format email tidak valid" });
+    }
 
     // cek apakah email sudah terdaftar
     if (await User.findOne({ email })) {
       return res.status(400).json({ message: "Email sudah terdaftar" });
+    }
+
+    // Validasi password (minimal 6 karakter)
+    if (!password || password.length < 6) {
+      return res
+        .status(400)
+        .json({ message: "Password harus memiliki minimal 6 karakter" });
+    }
+
+    // Validasi nomor telepon (hanya angka dan panjangnya sesuai)
+    const phoneRegex = /^\d{10,15}$/;
+    if (!phoneNumber || !phoneRegex.test(phoneNumber)) {
+      return res.status(400).json({ message: "Nomor telepon tidak valid" });
+    }
+
+    // Validasi alamat toko (tidak boleh kosong)
+    if (!storeAddress || storeAddress.trim().length === 0) {
+      return res
+        .status(400)
+        .json({ message: "Alamat toko tidak boleh kosong" });
     }
 
     // hash password
@@ -180,6 +212,8 @@ const register = async (req, res, next) => {
       name,
       email,
       password: hashedPassword,
+      storeAddress,
+      phoneNumber,
     });
 
     // kirim email verifikasi untuk otp
@@ -216,7 +250,7 @@ const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // cek apakah user ada di database
+    // cek apakah user ada
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(401).json({
@@ -225,7 +259,7 @@ const login = async (req, res) => {
       });
     }
 
-    // cek apakah password cocok
+    // cek password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return res.status(401).json({
@@ -234,12 +268,16 @@ const login = async (req, res) => {
       });
     }
 
-    // Cek apakah akun sudah diverifikasi
+    // Kalau belum diverifikasi
     if (!user.isVerified) {
-      return res.status(403).json({
-        status: "Error",
-        message:
-          "Akun belum diverifikasi. Silakan cek email untuk verifikasi OTP.",
+      // Generate OTP dan kirim ke email
+      await sendOTP(user, "verifikasi");
+
+      return res.status(200).json({
+        status: "Success",
+        message: "Akun belum diverifikasi. OTP baru telah dikirim ke email.",
+        isVerified: false,
+        email: user.email,
       });
     }
 
@@ -248,10 +286,20 @@ const login = async (req, res) => {
       expiresIn: "7d",
     });
 
+    // simpan log aktivitas login
+    await ActivityLog.create({
+      user: user._id,
+      type: "login",
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"],
+    });
+
     res.status(200).json({
       status: "Success",
       message: "Login berhasil",
+      role: user.role,
       token,
+      isVerified: true,
       user: {
         id: user._id,
         name: user.name,
@@ -393,7 +441,7 @@ const forgotPassword = async (req, res) => {
     await sendEmail(
       email,
       "[No Reply] - Reset Password",
-      `Dear ${User.name},
+      `Dear ${user.name},
 
         Kami menerima permintaan untuk mereset password akun Anda. Silahkan klik tombol di bawah ini untuk mereset password anda
         
@@ -407,7 +455,7 @@ const forgotPassword = async (req, res) => {
 
         Salam hangat,
         
-        Cura-Cents`,
+        OmzetDapur`,
       `<!DOCTYPE html>
 <html lang="en">
   <body
@@ -441,7 +489,7 @@ const forgotPassword = async (req, res) => {
           >
             <tr>
               <td style="text-align: center; padding: 20px 0">
-                <h1 style="margin: 0; color: #80b4d4">Cura-Cents</h1>
+                <h1 style="margin: 0; color: #80b4d4">OmzetDapur</h1>
               </td>
             </tr>
             <tr>
@@ -453,7 +501,7 @@ const forgotPassword = async (req, res) => {
                   color: #ffffff;
                 "
               >
-                <h1 style="margin: 0">Welcome to Cura-Cents!</h1>
+                <h1 style="margin: 0">Welcome to OmzetDapur!</h1>
               </td>
             </tr>
             <tr>
@@ -466,7 +514,7 @@ const forgotPassword = async (req, res) => {
                     color: #333333;
                   "
                 >
-                  Dear ${User.name},
+                  Dear ${user.name},
                 </p>
                 <p
                   style="
@@ -517,7 +565,7 @@ const forgotPassword = async (req, res) => {
                   <br />
                   <br />
                   <br />
-                  Cura-Cents
+                  OmzetDapur
                 </p>
               </td>
             </tr>
@@ -531,10 +579,10 @@ const forgotPassword = async (req, res) => {
                 "
               >
                 <p style="margin: 0; font-size: 12px">
-                  &copy; 2025 Cura-Cents. All rights reserved.
+                  &copy; 2025 OmzetDapur. All rights reserved.
                 </p>
                 <p style="margin: 10px 0 0 0; font-size: 12px">
-                  Cura-Cents Email System
+                  OmzetDapur Email System
                 </p>
               </td>
             </tr>
@@ -628,48 +676,6 @@ const resetPassword = async (req, res) => {
     });
   }
 };
-
-// Request otp untuk update email
-// const requestEmailUpdateOTP = async (req, res, next) => {
-//   try {
-//     const { newEmail } = req.body;
-//     const userId = req.user.id;
-
-//     // cek apakah email baru sudah digunakan oleh user lain
-//     if (await User.findOne({ email: newEmail })) {
-//       return res.status(400).json({
-//         status: "Error",
-//         message: "Email sudah terdaftar",
-//       });
-//     }
-
-//     // generate OTP
-//     const otp = crypto.randomInt(100000, 999999).toString();
-//     const otpExpires = Date.now() + 5 * 60 * 1000;
-
-//     // simpan OTP dan email baru sementara di database
-//     await User.findByIdAndUpdate(userId, {
-//       newEmail,
-//       emailOTP: otp,
-//       emailOTPExpires: otpExpires,
-//     });
-
-//     await sendOTP(user, "verifikasi");
-
-//     res.status(200).json({
-//       status: "Success",
-//       message: "OTP telah dikirimkan ke email yang baru",
-//     });
-//   } catch (err) {
-//     console.error(err);
-
-//     res.status(500).json({
-//       status: "Error",
-//       message: "Terjadi kesalahan pada server",
-//       error: err.message,
-//     });
-//   }
-// };
 
 module.exports = {
   register,
