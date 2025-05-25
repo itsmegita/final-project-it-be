@@ -1,6 +1,32 @@
-const User = require("../models/User");
 const bcrypt = require("bcryptjs");
+const User = require("../models/User");
 const ActivityLog = require("../models/ActivityLog");
+
+const getAdminDashboard = async (req, res) => {
+  try {
+    const [totalUsers, totalLogs] = await Promise.all([
+      User.countDocuments(),
+      ActivityLog.countDocuments(),
+    ]);
+
+    const recentUsers = await User.find().sort({ createdAt: -1 }).limit(5);
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        totalUsers,
+        totalLogs,
+        recentUsers,
+      },
+    });
+  } catch (error) {
+    console.error("Gagal mengambil data dashboard admin:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Gagal mengambil data dashboard admin",
+    });
+  }
+};
 
 const getUsers = async (req, res) => {
   try {
@@ -137,12 +163,26 @@ const updateUserByAdmin = async (req, res) => {
 
 const getActivityLogs = async (req, res) => {
   try {
-    const logs = await ActivityLog.find()
-      .populate("user", "name email")
-      .sort({ timestamp: -1 })
-      .select("user type timestamp ipAddress userAgent");
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
 
-    res.json(logs);
+    const [logs, total] = await Promise.all([
+      ActivityLog.find()
+        .populate("user", "name email")
+        .sort({ timestamp: -1 })
+        .select("user type timestamp ipAddress userAgent")
+        .skip(skip)
+        .limit(limit),
+      ActivityLog.countDocuments(),
+    ]);
+
+    res.status(200).json({
+      currentPage: page,
+      totalPages: Math.ceil(total / limit),
+      totalLogs: total,
+      data: logs,
+    });
   } catch (error) {
     res.status(500).json({
       message: "Gagal mengambil log aktivitas",
@@ -152,6 +192,7 @@ const getActivityLogs = async (req, res) => {
 };
 
 module.exports = {
+  getAdminDashboard,
   getUsers,
   getUser,
   updateUserByAdmin,
