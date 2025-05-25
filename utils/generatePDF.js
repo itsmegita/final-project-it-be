@@ -1,11 +1,15 @@
 const puppeteer = require("puppeteer");
 
-// fungsi untuk membuat pdf dengan puppeteer
 const generatePDF = async (htmlContent, outputFilePath) => {
-  const browser = await puppeteer.launch();
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
+
   const page = await browser.newPage();
 
   await page.setContent(htmlContent, { waitUntil: "networkidle0" });
+
   await page.pdf({
     path: outputFilePath,
     format: "A4",
