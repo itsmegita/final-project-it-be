@@ -1,13 +1,16 @@
 const express = require("express");
-const { protect, isAdmin } = require("../middleware/authMiddleware");
 const {
   getUsers,
   getUser,
   updateUserByAdmin,
   getActivityLogs,
+  getAdminDashboard,
 } = require("../controllers/adminController");
+const { protect, isAdmin } = require("../middleware/authMiddleware");
+
 const router = express.Router();
 
+router.get("/", protect, isAdmin, getAdminDashboard);
 router.get("/users", protect, isAdmin, getUsers);
 router.get("/users/:id", protect, isAdmin, getUser);
 router.patch("/users/:id", protect, isAdmin, updateUserByAdmin);
