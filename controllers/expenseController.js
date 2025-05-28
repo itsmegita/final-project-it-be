@@ -242,82 +242,81 @@ const updateExpense = async (req, res) => {
     let newDate = date ? new Date(date) : oldExpense.date;
     let newPaymentMethod = paymentMethod || oldExpense.paymentMethod;
     let newAmount = oldExpense.amount;
-    let newItems = [...oldExpense.items]; // Copy items lama
+    let newItems = [...oldExpense.items];
 
     if (newCategory === "Bahan Baku") {
-      if (items) {
-        if (!Array.isArray(items)) {
+      // Validasi: jika items kosong atau tidak dikirim, maka gagal
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({
+          status: "Error",
+          message: "Harap isi minimal satu item bahan baku",
+        });
+      }
+
+      // Rollback stok bahan baku dari old items
+      for (const oldItem of oldExpense.items) {
+        await FoodProduct.findByIdAndUpdate(
+          oldItem.foodProductId,
+          { $inc: { stock: -oldItem.quantity } },
+          { new: true }
+        );
+      }
+
+      // Update atau tambah item satu per satu
+      const updatedItems = [];
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const oldItem = oldExpense.items[i];
+
+        const foodProductId =
+          item.foodProductId || (oldItem ? oldItem.foodProductId : null);
+        if (!foodProductId) {
           return res.status(400).json({
             status: "Error",
-            message: "Items harus berupa array.",
+            message: `Item ke-${i + 1} tidak punya foodProductId`,
           });
         }
 
-        // Rollback stok bahan baku dari old items
-        for (const oldItem of oldExpense.items) {
-          await FoodProduct.findByIdAndUpdate(
-            oldItem.foodProductId,
-            { $inc: { stock: -oldItem.quantity } },
-            { new: true }
-          );
-        }
+        const quantity =
+          item.quantity !== undefined ? item.quantity : oldItem?.quantity;
+        const price = item.price !== undefined ? item.price : oldItem?.price;
+        const unit = item.unit !== undefined ? item.unit : oldItem?.unit;
 
-        // Update atau tambah item satu per satu
-        const updatedItems = [];
-
-        for (let i = 0; i < items.length; i++) {
-          const item = items[i];
-          const oldItem = oldExpense.items[i]; // Ambil dari posisi lama jika ada
-
-          const foodProductId =
-            item.foodProductId || (oldItem ? oldItem.foodProductId : null);
-          if (!foodProductId) {
-            return res.status(400).json({
-              status: "Error",
-              message: `Item ke-${i + 1} tidak punya foodProductId.`,
-            });
-          }
-
-          const quantity =
-            item.quantity !== undefined ? item.quantity : oldItem?.quantity;
-          const price = item.price !== undefined ? item.price : oldItem?.price;
-          const unit = item.unit !== undefined ? item.unit : oldItem?.unit;
-
-          if (
-            typeof quantity !== "number" ||
-            quantity <= 0 ||
-            typeof price !== "number" ||
-            price <= 0 ||
-            typeof unit !== "string"
-          ) {
-            return res.status(400).json({
-              status: "Error",
-              message: `Item ke-${
-                i + 1
-              } harus punya quantity (>0), price (>0), dan unit (string).`,
-            });
-          }
-
-          updatedItems.push({
-            foodProductId,
-            quantity,
-            price,
-            unit,
-            total: quantity * price,
+        if (
+          typeof quantity !== "number" ||
+          quantity <= 0 ||
+          typeof price !== "number" ||
+          price <= 0 ||
+          typeof unit !== "string"
+        ) {
+          return res.status(400).json({
+            status: "Error",
+            message: `Item ke-${
+              i + 1
+            } harus punya quantity (>0), price (>0), dan unit (string)`,
           });
         }
 
-        newItems = updatedItems;
-        newAmount = newItems.reduce((acc, item) => acc + item.total, 0);
+        updatedItems.push({
+          foodProductId,
+          quantity,
+          price,
+          unit,
+          total: quantity * price,
+        });
+      }
 
-        // Update stok bahan baku berdasarkan newItems
-        for (const item of newItems) {
-          await FoodProduct.findByIdAndUpdate(
-            item.foodProductId,
-            { $inc: { stock: item.quantity } },
-            { new: true }
-          );
-        }
+      newItems = updatedItems;
+      newAmount = newItems.reduce((acc, item) => acc + item.total, 0);
+
+      // Update stok bahan baku berdasarkan newItems
+      for (const item of newItems) {
+        await FoodProduct.findByIdAndUpdate(
+          item.foodProductId,
+          { $inc: { stock: item.quantity } },
+          { new: true }
+        );
       }
     } else {
       // Kalau bukan kategori Bahan Baku
