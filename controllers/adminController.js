@@ -3,7 +3,6 @@ const User = require("../models/User");
 const Transaction = require("../models/Transaction");
 const Expense = require("../models/Expense");
 const ActivityLog = require("../models/ActivityLog");
-const puppeteer = require("puppeteer");
 
 const getAdminDashboard = async (req, res) => {
   try {
@@ -200,6 +199,8 @@ const getAllTransactions = async (req, res) => {
 
     // validasi query
     const query = {};
+
+    // validasi user id
     if (user) {
       if (!user.match(/^[0-9a-fA-F]{24}$/)) {
         return res.status(400).json({
@@ -208,6 +209,21 @@ const getAllTransactions = async (req, res) => {
         });
       }
       query.userId = user;
+    }
+
+    // Validasi filter tanggal
+    if (bulan && !tahun) {
+      return res.status(400).json({
+        status: "Error",
+        message: "Tahun harus diisi jika ingin memfilter berdasarkan bulan.",
+      });
+    }
+
+    // Jika tahun saja (tanpa bulan)
+    if (tahun && !bulan) {
+      const start = new Date(tahun, 0, 1);
+      const end = new Date(Number(tahun) + 1, 0, 1);
+      query.date = { $gte: start, $lt: end };
     }
 
     // filter bulan/tahun
@@ -259,17 +275,20 @@ const getSystemReport = async (req, res) => {
   try {
     const { bulan, tahun } = req.query;
 
-    // validasi bulan dan tahun
-    if (!bulan || !tahun) {
+    if (!tahun) {
       return res.status(400).json({
         status: "Error",
-        message: "Bulan dan tahun wajib diisi",
+        message: "Tahun wajib diisi",
       });
     }
 
-    const start = new Date(tahun, bulan - 1, 1);
-    const end = new Date(tahun, bulan, 1);
-    const dateFilter = { date: { $gte: start, $lt: end } };
+    let dateFilter = {};
+    if (bulan) {
+      const bulanNum = Number(bulan);
+      const start = new Date(tahun, bulanNum - 1, 1);
+      const end = new Date(tahun, bulanNum, 1);
+      dateFilter = { date: { $gte: start, $lt: end } };
+    }
 
     const users = await User.find({ role: "user" });
 
@@ -301,7 +320,7 @@ const getSystemReport = async (req, res) => {
     return res.status(200).json({
       status: "Success",
       message: "Laporan sistem berhasil diambil",
-      periode: `${bulan}-${tahun}`,
+      periode: bulan ? `${bulan}-${tahun}` : tahun,
       data: reportData,
     });
   } catch (err) {
