@@ -1,6 +1,9 @@
 const bcrypt = require("bcryptjs");
 const User = require("../models/User");
+const Transaction = require("../models/Transaction");
+const Expense = require("../models/Expense");
 const ActivityLog = require("../models/ActivityLog");
+const puppeteer = require("puppeteer");
 
 const getAdminDashboard = async (req, res) => {
   try {
@@ -191,10 +194,131 @@ const getActivityLogs = async (req, res) => {
   }
 };
 
+const getAllTransactions = async (req, res) => {
+  try {
+    const { user, bulan, tahun, page = 1, limit = 10 } = req.query;
+
+    // validasi query
+    const query = {};
+    if (user) {
+      if (!user.match(/^[0-9a-fA-F]{24}$/)) {
+        return res.status(400).json({
+          status: "Error",
+          message: "User ID tidak valid",
+        });
+      }
+      query.userId = user;
+    }
+
+    // filter bulan/tahun
+    if (bulan && tahun) {
+      const start = new Date(tahun, bulan - 1, 1);
+      const end = new Date(tahun, bulan, 1);
+      query.date = { $gte: start, $lt: end };
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // ambil data + total
+    const [transactions, total] = await Promise.all([
+      Transaction.find(query)
+        .populate("userId", "name email")
+        .sort({ date: -1 })
+        .skip(skip)
+        .limit(parseInt(limit)),
+      Transaction.countDocuments(query),
+    ]);
+
+    res.status(200).json({
+      status: "Success",
+      message: "Berhasil mengambil semua transaksi",
+      data: transactions.map((tx) => ({
+        _id: tx._id,
+        date: tx.date,
+        customerName: tx.customerName,
+        amount: tx.amount,
+        user: tx.userId,
+        orderItems: tx.orderItems,
+      })),
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(total / limit),
+        totalTransactions: total,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: "Error",
+      message: "Gagal mengambil data transaksi",
+      error: err.message,
+    });
+  }
+};
+
+const getSystemReport = async (req, res) => {
+  try {
+    const { bulan, tahun } = req.query;
+
+    // validasi bulan dan tahun
+    if (!bulan || !tahun) {
+      return res.status(400).json({
+        status: "Error",
+        message: "Bulan dan tahun wajib diisi",
+      });
+    }
+
+    const start = new Date(tahun, bulan - 1, 1);
+    const end = new Date(tahun, bulan, 1);
+    const dateFilter = { date: { $gte: start, $lt: end } };
+
+    const users = await User.find({ role: "user" });
+
+    const reportData = [];
+
+    for (const user of users) {
+      const [userTransactions, userExpenses] = await Promise.all([
+        Transaction.find({ userId: user._id, ...dateFilter }),
+        Expense.find({ userId: user._id, ...dateFilter }),
+      ]);
+
+      const totalIncome = userTransactions.reduce(
+        (sum, tx) => sum + tx.amount,
+        0
+      );
+      const totalExpense = userExpenses.reduce((sum, ex) => sum + ex.amount, 0);
+      const profit = totalIncome - totalExpense;
+
+      reportData.push({
+        userId: user._id,
+        name: user.name,
+        email: user.email,
+        totalIncome,
+        totalExpense,
+        profit,
+      });
+    }
+
+    return res.status(200).json({
+      status: "Success",
+      message: "Laporan sistem berhasil diambil",
+      periode: `${bulan}-${tahun}`,
+      data: reportData,
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: "Error",
+      message: "Gagal mengambil laporan sistem",
+      error: err.message,
+    });
+  }
+};
+
 module.exports = {
   getAdminDashboard,
   getUsers,
   getUser,
   updateUserByAdmin,
   getActivityLogs,
+  getAllTransactions,
+  getSystemReport,
 };
